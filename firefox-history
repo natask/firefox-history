@@ -7,4 +7,13 @@ cur.execute(f"select visit_date from mine where url = {url}")
 visit_dates = []
 while (res := cur.fetchone()):
     visit_dates.append(res[0])
-visit_dates
+urls = {"url": url}
+for date in visit_dates:
+    urls[date] = {"left" : [ ], "right" : []}
+    urls_date = urls[date]
+    cur.execute(f"select url from mine where visit_date > {date} limit 10")
+    while (res := cur.fetchone()):
+        urls_date["left"].append(res[0])
+    cur.execute(f"select url from mine where visit_date < {date} order by visit_date desc limit 10")
+    while (res := cur.fetchone()):
+        urls_date["right"].append(res[0])
