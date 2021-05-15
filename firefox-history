@@ -1,0 +1,10 @@
+#! /usr/bin/env python3
+import sqlite3
+con = sqlite3.connect("/home/savnkk/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite.bak")
+cur = con.cursor()
+url =  "'https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96'"
+cur.execute(f"select visit_date from mine where url = {url}") 
+visit_dates = []
+while (res := cur.fetchone()):
+    visit_dates.append(res[0])
+visit_dates
