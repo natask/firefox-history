@@ -1,0 +1,43 @@
+#+TITLE: Firefox History
+This is a tool to explore url history that is located within firefox database. It is Emacs integrated. One can check if url has been visited and when directly from firefox by executing a command through org-protocol.
+
+* setup
+- Install package (doom) ::
+#+begin_src emacs-lisp
+(package! firefox-history
+  :recipe (:host github
+           :repo "natask/firefox-history"
+           :branch  "master"
+           :files (:defaults "firefox-history")))
+#+end_src
+- use package ::
+#+begin_src emacs-lisp
+(use-package  firefox-history
+  :defer t
+  :custom
+  (firefox-history-location "~/org-data/e0/51f18f-ae0b-416c-92a7-766a3ceefdb4/firefox-history")
+  (firefox-database-location   "~/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite")
+  )
+#+end_src
+- firefox emacs integration (surfing keys) ::
+[[https://github.com/brookhong/Surfingkeys/][GitHub - brookhong/Surfingkeys: Map your keys for web surfing, expand your browser with javascript and keyboard.]]
+[[https://gist.github.com/natask/4f2a5468845cebcfc8d632873d4b8c27][my surfing keys config]]
+#+begin_src js
+function protocolCall(type, template="", extra = ""){
+    var url = location.href;
+    var title = (document.title || new Date().toString());
+    javascript:location.href =
+        'org-protocol://'
+        + type
+        + '?template='
+        + template
+        + '&ref='
+        + encodeURIComponent(url)
+        + '&title='
+        + encodeURIComponent(title)
+        + extra;
+}
+mapkey('cf', 'org protocol capture ref', function() {
+    protocolCall("firefox-history");
+});
+#+end_src
