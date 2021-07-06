@@ -30,7 +30,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 example_text = '''example:
  firefox-history https://google.com
  '''
-
 parser = argparse.ArgumentParser(description=program_description, epilog=example_text, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('url', type=str, nargs="?", default="https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96", help=
                     textwrap.dedent('''\
@@ -44,6 +43,8 @@ parser.add_argument('--postfix', type=str, default="bak", help=
                     textwrap.dedent('''\
 Postfix difference between main database and copy database to which sql will connect to.
         '''),metavar='Postfix')
+parser.add_argument('--depth', type=int, default=10, help='''\
+depth of backtrace and chronology for `url.''')
 parser.add_argument('--stable', action="store_true", help='''\
 Database is stable. It doesn't change therefore direct connection will be made to it.''')
 parser.add_argument('--elisp', action="store_true", help='''\
@@ -71,11 +72,11 @@ def getChrono(cur, url, visit_dates):
  for date in visit_dates:
   chrono[date] = {"left" : [ ], "right" : []}
   chrono_date = chrono[date]
-  cur.execute(f"select url, visit_date from mine where visit_date > {date} limit 10")
+  cur.execute(f"select url, visit_date from mine where visit_date > {date} limit {DEPTH}")
   while (res := cur.fetchone()):
    chrono_date["right"].append(res)
 
-  cur.execute(f"select url, visit_date from mine where visit_date < {date} order by visit_date desc limit 10")
+  cur.execute(f"select url, visit_date from mine where visit_date < {date} order by visit_date desc limit {DEPTH}")
   while (res := cur.fetchone()):
    chrono_date["left"].append(res)
    chrono_date["left"] = chrono_date["left"][::-1]
@@ -92,13 +93,19 @@ def getBacktrack(cur, url, visit_dates):
 
    backtrack[date] = []
    backtrack_date = backtrack[date]
-   while hid != 0:
+   depth = 0;
+   while hid != 0 or depth < DEPTH:
+    depth = depth + 1;
     cur.execute(f"select from_visit from mine where hid={hid}")
-    hid = cur.fetchone()[0]
+    if res := cur.fetchone():
+     hid = res[0]
+    else:
+     hid = 0;
 
     if (hid != 0):
      cur.execute(f"select visit_date,url from mine where hid={hid}")
-     backtrack_date.append(cur.fetchone())
+     if res := cur.fetchone():
+      backtrack_date.append(res)
 
  return backtrack;
 
@@ -178,17 +185,20 @@ def print_backtrack_elisp(visit_dates, chrono):
  print();
 
 def main():
- args = parser.parse_args()
- url = "'" + args.url + "'"
- database = args.database
- postfix = args.postfix
- stable = args.stable
- elisp = args.elisp
+ global DEPTH
+ args       = parser.parse_args()
+ url        = "'" + args.url + "'"
+ database   = args.database
+ postfix    = args.postfix
+ DEPTH      = args.depth;
+ stable     = args.stable
+ elisp      = args.elisp
  backtrackp =  args.backtrack
- visitp = args.visit
- chronop = args.chrono
+ visitp     = args.visit
+ chronop    = args.chrono
 
  if not stable:
+  # NOTE: need to check there is no other process making calls to the copy database.
   subprocess.call(shlex.split(f"cp {database} {database + '.' + postfix}"))
   database = database + '.' + postfix
   con = sqlite3.connect(database)
@@ -199,8 +209,8 @@ def main():
   pass
 
  visit_dates = getVisitDates(cur,url);
- chrono = getChrono(cur, url, visit_dates);
- backtrack = getBacktrack(cur,url, visit_dates);
+ chrono = chronop and getChrono(cur, url, visit_dates);
+ backtrack = backtrackp and getBacktrack(cur,url, visit_dates);
 
  if not elisp:
   chronop and print_chrono_normal(visit_dates, chrono);
