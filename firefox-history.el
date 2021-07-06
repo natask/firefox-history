@@ -22,19 +22,19 @@
 (require 'org-protocol)
 
 ;;; vars:
-(defvar firefox-history-location "~/org-data/e0/51f18f-ae0b-416c-92a7-766a3ceefdb4/firefox-history"
+(defcustom firefox-history-location  (concat (file-name-directory (locate-library "firefox-history")) "firefox-history")
   "Location of `firefox-history' script."
   :type '(string)
 :group 'firefox-history)
-(defvar firefox-database-location   "~/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite"
+(defcustom firefox-database-location   "~/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite"
   "Location of the firefox database."
   :type '(string)
   :group 'firefox-history)
-(defvar firefox-database-temp-extension   "bak"
+(defcustom firefox-database-temp-extension   "bak"
   "Extension for temporary firefox database."
   :type '(string)
   :group 'firefox-history)
-(defvar firefox-history-depth   10
+(defcustom firefox-history-depth   10
   "Depth of history query."
   :type '(integer)
   :group 'firefox-history)
