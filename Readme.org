@@ -13,9 +13,8 @@ This is a tool to explore url history that is located within firefox database. I
 - use package ::
 #+begin_src emacs-lisp
 (use-package  firefox-history
-  :defer t
+  :after ((org) (org-protocol))
   :custom
-  (firefox-history-location "~/org-data/e0/51f18f-ae0b-416c-92a7-766a3ceefdb4/firefox-history")
   (firefox-database-location   "~/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite")
   )
 #+end_src
