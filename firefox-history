@@ -1,19 +1,215 @@
 #! /usr/bin/env python3
 import sqlite3
-con = sqlite3.connect("/home/savnkk/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite.bak")
-cur = con.cursor()
-url =  "'https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96'"
-cur.execute(f"select visit_date from mine where url = {url}") 
-visit_dates = []
-while (res := cur.fetchone()):
-    visit_dates.append(res[0])
-urls = {"url": url}
-for date in visit_dates:
-    urls[date] = {"left" : [ ], "right" : []}
-    urls_date = urls[date]
-    cur.execute(f"select url from mine where visit_date > {date} limit 10")
-    while (res := cur.fetchone()):
-        urls_date["left"].append(res[0])
-    cur.execute(f"select url from mine where visit_date < {date} order by visit_date desc limit 10")
-    while (res := cur.fetchone()):
-        urls_date["right"].append(res[0])
+import subprocess
+import shlex
+import argparse
+import textwrap
+from datetime import datetime
+
+################### parse arg #######################
+#doesn't do bound checking on argv
+program_description = '''
+Firefox History v0.1
+
+Copyright (C) 2020  Natnael Kahssay
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+'''
+
+example_text = '''example:
+ firefox-history https://google.com
+ '''
+
+parser = argparse.ArgumentParser(description=program_description, epilog=example_text, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('url', type=str, nargs="?", default="https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96", help=
+                    textwrap.dedent('''\
+Url that is to be searched in database.
+        '''),metavar='Url')
+parser.add_argument('--database', type=str, default="/home/savnkk/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite", help=
+                    textwrap.dedent('''\
+Location of database.
+        '''),metavar='Database')
+parser.add_argument('--postfix', type=str, default="bak", help=
+                    textwrap.dedent('''\
+Postfix difference between main database and copy database to which sql will connect to.
+        '''),metavar='Postfix')
+parser.add_argument('--stable', action="store_true", help='''\
+Database is stable. It doesn't change therefore direct connection will be made to it.''')
+parser.add_argument('--elisp', action="store_true", help='''\
+Output in elisp form.''')
+parser.add_argument('--visit', action="store_true", help='''\
+Output visited dates for `url.''')
+parser.add_argument('--chrono', action="store_true", help='''\
+Output chronology for `url.''')
+parser.add_argument('--backtrack', action="store_true", help='''\
+Output backtrace for `url.''')
+################### parse arg #######################
+
+def dateToString(date):
+ return(datetime.utcfromtimestamp(date/1000000).strftime('%Y-%m-%d %H:%M:%S'));
+
+def getVisitDates(cur, url):
+ cur.execute(f"select visit_date from mine where url = {url}")
+ visit_dates = []
+ while (res := cur.fetchone()):
+  visit_dates.append(res[0])
+ return visit_dates;
+
+def getChrono(cur, url, visit_dates):
+ chrono = {"url": url};
+ for date in visit_dates:
+  chrono[date] = {"left" : [ ], "right" : []}
+  chrono_date = chrono[date]
+  cur.execute(f"select url, visit_date from mine where visit_date > {date} limit 10")
+  while (res := cur.fetchone()):
+   chrono_date["right"].append(res)
+
+  cur.execute(f"select url, visit_date from mine where visit_date < {date} order by visit_date desc limit 10")
+  while (res := cur.fetchone()):
+   chrono_date["left"].append(res)
+   chrono_date["left"] = chrono_date["left"][::-1]
+
+ return chrono;
+
+
+def getBacktrack(cur, url, visit_dates):
+ backtrack = {"url": url};
+ for date in visit_dates:
+  cur.execute(f"select hid from mine where visit_date = {date} limit 10")
+  if res := cur.fetchone():
+   hid = res[0]
+
+   backtrack[date] = []
+   backtrack_date = backtrack[date]
+   while hid != 0:
+    cur.execute(f"select from_visit from mine where hid={hid}")
+    hid = cur.fetchone()[0]
+
+    if (hid != 0):
+     cur.execute(f"select visit_date,url from mine where hid={hid}")
+     backtrack_date.append(cur.fetchone())
+
+ return backtrack;
+
+def print_chrono_normal(visit_dates, chrono):
+ print()
+ print("Chronological track")
+ print("##############################")
+
+ for date in visit_dates:
+  for url in chrono[date]["left"]:
+   print((dateToString(url[1]), url[0]))
+
+  print()
+  print((dateToString(date), chrono["url"]))
+  print()
+  for url in chrono[date]["right"]:
+   print((dateToString(url[1]), url[0]))
+
+  print()
+  print()
+  print()
+  print("##############################")
+
+def print_backtrack_normal(visit_dates, backtrack):
+ print()
+ print()
+ print("Back track")
+ print("##############################")
+ for date in visit_dates:
+  print((dateToString(date), backtrack["url"]))
+  print()
+
+  for entry in backtrack[date]:
+   print((dateToString(entry[0]), entry[1]))
+
+  print()
+  print()
+  print()
+
+ print("##############################")
+
+def is_iterable(item):
+ return hasattr(item, '__getitem__');
+
+def print_iter_elisp(item):
+ if not is_iterable(item):
+  print(item, end=" ")
+ elif type(item) == type(""):
+  print("\"" + item + "\"", end=" ")
+ elif type(item) == type({}):
+  print("(", end="");
+  for val in item:
+   print("(", end="");
+   print_iter_elisp(val);
+   print_iter_elisp(item[val]);
+   print(")", end=" ");
+
+  print(")", end="")
+ else: #type(item) == type([])
+  print("(", end="");
+  for val in item:
+   print_iter_elisp(val);
+
+  print(")", end= "")
+
+
+def print_visit_elisp(visit_dates):
+ print_iter_elisp(visit_dates);
+ print();
+
+def print_chrono_elisp(visit_dates, chrono):
+ print_iter_elisp(chrono);
+ print();
+
+def print_backtrack_elisp(visit_dates, chrono):
+ print_iter_elisp(chrono);
+ print();
+
+def main():
+ args = parser.parse_args()
+ url = "'" + args.url + "'"
+ database = args.database
+ postfix = args.postfix
+ stable = args.stable
+ elisp = args.elisp
+ backtrackp =  args.backtrack
+ visitp = args.visit
+ chronop = args.chrono
+
+ if not stable:
+  subprocess.call(shlex.split(f"cp {database} {database + '.' + postfix}"))
+  database = database + '.' + postfix
+  con = sqlite3.connect(database)
+  cur = con.cursor()
+ try:
+  cur.execute(f"create view mine as select a.id, b.id hid, a.url, b.from_visit, b.visit_date from moz_places a inner join moz_historyvisits b on b.place_id = a.id order by b.visit_date")
+ except:
+  pass
+
+ visit_dates = getVisitDates(cur,url);
+ chrono = getChrono(cur, url, visit_dates);
+ backtrack = getBacktrack(cur,url, visit_dates);
+
+ if not elisp:
+  chronop and print_chrono_normal(visit_dates, chrono);
+  backtrackp and print_backtrack_normal(visit_dates, backtrack);
+ else:
+  visitp and print_visit_elisp(visit_dates);
+  chronop and print_chrono_elisp(visit_dates, chrono);
+  backtrackp and print_backtrack_elisp(visit_dates, backtrack);
+
+
+if __name__ == "__main__":
+ main();
