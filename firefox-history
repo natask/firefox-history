@@ -191,7 +191,7 @@ def main():
  global DEPTH
  args       = parser.parse_args()
  query      = args.url
- url        = "'%" + args.url + "%'"
+ url        = "'" + args.url + "'"
  database   = args.database
  postfix    = args.postfix
  DEPTH      = args.depth;
@@ -205,9 +205,10 @@ def main():
  if not stable:
   # NOTE: need to check there is no other process making calls to the copy database.
   subprocess.call(shlex.split(f"cp {database} {database + '.' + postfix}"))
-  database = database + '.' + postfix
-  con = sqlite3.connect(database)
-  cur = con.cursor()
+
+ database = database + '.' + postfix
+ con = sqlite3.connect(database)
+ cur = con.cursor()
  try:
   cur.execute(f"create view mine as select a.id, b.id hid, a.url, b.from_visit, b.visit_date from moz_places a inner join moz_historyvisits b on b.place_id = a.id order by b.visit_date")
  except:
