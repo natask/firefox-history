@@ -79,8 +79,8 @@ def getChrono(cur, url, visit_dates):
   cur.execute(f"select url, visit_date from mine where visit_date < {date} order by visit_date desc limit {DEPTH}")
   while (res := cur.fetchone()):
    chrono_date["left"].append(res)
-   chrono_date["left"] = chrono_date["left"][::-1]
 
+  chrono_date["left"] = chrono_date["left"][::-1]
  return chrono;
 
 
