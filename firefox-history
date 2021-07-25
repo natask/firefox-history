@@ -8,10 +8,16 @@ from datetime import datetime
 
 ################### parse arg #######################
 #doesn't do bound checking on argv
-program_description = '''
-Firefox History v0.1
+class RawTextArgumentDefaultsHelpFormatter(
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.RawTextHelpFormatter
+    ):
+        pass
 
-Copyright (C) 2020  Natnael Kahssay
+program_description = '''
+Firefox History v0.2
+
+Copyright (C) 2021  Natnael Kahssay
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,7 +36,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 example_text = '''example:
  firefox-history https://google.com
  '''
-parser = argparse.ArgumentParser(description=program_description, epilog=example_text, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser = argparse.ArgumentParser(description=program_description, epilog=example_text, formatter_class=RawTextArgumentDefaultsHelpFormatter)
 parser.add_argument('url', type=str, nargs="?", default="https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96", help=
                     textwrap.dedent('''\
 Url that is to be searched in database.
@@ -53,46 +59,53 @@ parser.add_argument('--visit', action="store_true", help='''\
 Output visited dates for `url.''')
 parser.add_argument('--chrono', action="store_true", help='''\
 Output chronology for `url.''')
-parser.add_argument('--backtrack', action="store_true", help='''\
+parser.add_argument('--backtrace', action="store_true", help='''\
 Output backtrace for `url.''')
+parser.add_argument('--query', action="store_true", help='''\
+Output query result for `query by intrepreting `url as a `query.''')
 ################### parse arg #######################
 
 def dateToString(date):
  return(datetime.utcfromtimestamp(date/1000000).strftime('%Y-%m-%d %H:%M:%S'));
 
-def getVisitDates(cur, url):
- cur.execute(f"select visit_date from mine where url = {url}")
- visit_dates = []
- while (res := cur.fetchone()):
-  visit_dates.append(res[0])
- return visit_dates;
+def getQueryResults(cur, string):
+ cur.execute(string);
+ ret =  cur.fetchall();
+ # if len(ret) > 0 and len(ret[0]) == 1:
+ #  ret = list(map(lambda x : x[0], ret))
+ return ret;
 
-def getChrono(cur, url, visit_dates):
- chrono = {"url": url};
- for date in visit_dates:
-  chrono[date] = {"left" : [ ], "right" : []}
+'''
+Get visit date and url for urls that are like URL.
+'''
+def getVisitInfo(cur, url):
+ return getQueryResults(cur, f"select visit_date, url from mine where url like {url}");
+
+'''
+Get chronological info for VISIT_INFO.
+'''
+def getChrono(cur, visit_info):
+ chrono = {};
+ for date,url in visit_info:
+  chrono[date] = {"url": url, "left" : [ ], "right" : []}
   chrono_date = chrono[date]
-  cur.execute(f"select url, visit_date from mine where visit_date > {date} limit {DEPTH}")
-  while (res := cur.fetchone()):
-   chrono_date["right"].append(res)
-
-  cur.execute(f"select url, visit_date from mine where visit_date < {date} order by visit_date desc limit {DEPTH}")
-  while (res := cur.fetchone()):
-   chrono_date["left"].append(res)
-
+  chrono_date["right"] = getQueryResults(cur, f"select url, visit_date from mine where visit_date > {date} limit {DEPTH}")
+  chrono_date["left"] = getQueryResults(cur, f"select url, visit_date from mine where visit_date < {date} order by visit_date desc limit {DEPTH}")
   chrono_date["left"] = chrono_date["left"][::-1]
  return chrono;
 
-
-def getBacktrack(cur, url, visit_dates):
- backtrack = {"url": url};
- for date in visit_dates:
-  cur.execute(f"select hid from mine where visit_date = {date} limit 10")
+'''
+Get backtrace info for VISIT_INFO.
+'''
+def getBacktrace(cur, visit_info):
+ backtrace = {}
+ for date,url in visit_info:
+  res = cur.execute(f"select hid from mine where visit_date = {date} limit 10")
   if res := cur.fetchone():
    hid = res[0]
 
-   backtrack[date] = []
-   backtrack_date = backtrack[date]
+   backtrace[date] = {"url": url, "backtrace": []}
+   backtrace_date = backtrace[date]["backtrace"]
    depth = 0;
    while hid != 0 or depth < DEPTH:
     depth = depth + 1;
@@ -103,23 +116,21 @@ def getBacktrack(cur, url, visit_dates):
      hid = 0;
 
     if (hid != 0):
-     cur.execute(f"select visit_date,url from mine where hid={hid}")
-     if res := cur.fetchone():
-      backtrack_date.append(res)
+     backtrace_date += getQueryResults(cur, f"select visit_date,url from mine where hid={hid}")
 
- return backtrack;
+ return backtrace;
 
-def print_chrono_normal(visit_dates, chrono):
+def print_chrono_normal(chrono):
  print()
  print("Chronological track")
  print("##############################")
 
- for date in visit_dates:
+ for date in chrono.keys():
   for url in chrono[date]["left"]:
    print((dateToString(url[1]), url[0]))
 
   print()
-  print((dateToString(date), chrono["url"]))
+  print((dateToString(date), chrono[date]["url"]))
   print()
   for url in chrono[date]["right"]:
    print((dateToString(url[1]), url[0]))
@@ -129,16 +140,16 @@ def print_chrono_normal(visit_dates, chrono):
   print()
   print("##############################")
 
-def print_backtrack_normal(visit_dates, backtrack):
+def print_backtrace_normal(backtrace):
  print()
  print()
  print("Back track")
  print("##############################")
- for date in visit_dates:
-  print((dateToString(date), backtrack["url"]))
+ for date in backtrace.keys():
+  print((dateToString(date), backtrace[date]["url"]))
   print()
 
-  for entry in backtrack[date]:
+  for entry in backtrace[date]["backtrace"]:
    print((dateToString(entry[0]), entry[1]))
 
   print()
@@ -150,7 +161,7 @@ def print_backtrack_normal(visit_dates, backtrack):
 def is_iterable(item):
  return hasattr(item, '__getitem__');
 
-def print_iter_elisp(item):
+def print_iter_elisp_helper(item):
  if not is_iterable(item):
   print(item, end=" ")
  elif type(item) == type(""):
@@ -172,28 +183,22 @@ def print_iter_elisp(item):
   print(")", end= "")
 
 
-def print_visit_elisp(visit_dates):
- print_iter_elisp(visit_dates);
- print();
-
-def print_chrono_elisp(visit_dates, chrono):
- print_iter_elisp(chrono);
- print();
-
-def print_backtrack_elisp(visit_dates, chrono):
- print_iter_elisp(chrono);
+def print_iter_elisp(item):
+ print_iter_elisp_helper(item);
  print();
 
 def main():
  global DEPTH
  args       = parser.parse_args()
- url        = "'" + args.url + "'"
+ query      = args.url
+ url        = "'%" + args.url + "%'"
  database   = args.database
  postfix    = args.postfix
  DEPTH      = args.depth;
  stable     = args.stable
  elisp      = args.elisp
- backtrackp =  args.backtrack
+ backtracep = args.backtrace
+ queryp     = args.query
  visitp     = args.visit
  chronop    = args.chrono
 
@@ -208,17 +213,23 @@ def main():
  except:
   pass
 
- visit_dates = getVisitDates(cur,url);
- chrono = chronop and getChrono(cur, url, visit_dates);
- backtrack = backtrackp and getBacktrack(cur,url, visit_dates);
+ visit_info = getVisitInfo(cur,url);
+ chrono = chronop and getChrono(cur, visit_info);
+ backtrace = backtracep and getBacktrace(cur,visit_info);
+ queryResults = queryp and getQueryResults(cur,query);
 
  if not elisp:
-  chronop and print_chrono_normal(visit_dates, chrono);
-  backtrackp and print_backtrack_normal(visit_dates, backtrack);
+  queryp and print(queryResults);
+  visitp and  print(visit_info);
+  chronop and print_chrono_normal(chrono);
+  backtracep and print_backtrace_normal(backtrace);
  else:
-  visitp and print_visit_elisp(visit_dates);
-  chronop and print_chrono_elisp(visit_dates, chrono);
-  backtrackp and print_backtrack_elisp(visit_dates, backtrack);
+  queryp and print_iter_elisp(queryResults);
+  visitp and print_iter_elisp(visit_info);
+  chronop and print_iter_elisp(chrono);
+  backtracep and print_iter_elisp(backtrace);
+
+ cur.close()
 
 
 if __name__ == "__main__":
