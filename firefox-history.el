@@ -40,23 +40,24 @@
   :group 'firefox-history)
 
 ;;; Code:
-(defun firefox-history (url &rest args)
-  "Call `firefox-history' with arguments URL and ARGS."
+(defun firefox-history (&rest args)
+  "Call `firefox-history' with arguments ARGS."
   (let ((args (-reduce (lambda (x y) (concat x " " y)) args)))
     (read
-    (shell-command-to-string (concat firefox-history-location " " url " " args)))))
+    (shell-command-to-string (concat firefox-history-location " " args)))))
 
 
-(defun firefox-history-check-if-visited (url fn)
+(defun firefox-history-check-if-visited (url &optional fn)
   "Check if URL has been visited in the past by querying firefox database.
 Call FN if URL has been found."
   (when-let ((visit-dates (mapcar (lambda (x) (--> x
+                                              (car x)
                                               (/ it 1000000)
                                               (seconds-to-time it)
                                               (format-time-string "[%Y-%m-%d %a %H:%M:%S]" it)
-                                              (cons it x)))
+                                              (cons (concat it " " (cdr x)) x)))
                               (firefox-history url "--elisp" "--visit"))))
-    (funcall fn)
+    (if fn (funcall fn))
     (helm :sources (helm-build-sync-source "select container"
                      :candidates (reverse visit-dates) :filtered-candidate-transformer))))
 
@@ -69,7 +70,7 @@ When check is available in url, no matter what it is set to, just check if file 
 
     javascript:location.href = 'org-protocol://firefox-history?ref=' + \\
           encodeURIComponent(location.href)"
-  (let* ((ref (plist-get info :ref))
+  (let* ((ref (car (split-string (plist-get info :ref) "[&#]")))
          (fn (lambda () (x-focus-frame nil) (raise-frame) (select-frame-set-input-focus (selected-frame)))))
     (firefox-history-check-if-visited ref fn)))
 
