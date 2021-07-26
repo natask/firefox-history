@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 '''
-usage: firefox-history [-h] [--database Database] [--postfix Postfix] [--depth DEPTH] [--stable] [--elisp] [--visit] [--chrono] [--backtrace] [--query] [URL]
+usage: firefox-history [-h] [--database Database] [--postfix Postfix] [--depth DEPTH] [--stable] [--elisp] [--visit] [--chrono] [--backtrace] [--query] [URL] [--time TIME]
 
 Firefox History v0.2
 
@@ -30,7 +30,8 @@ optional arguments:
   --postfix Postfix    Postfix difference between main database and copy database to which sql will connect to.
                         [default: bak]
   --depth DEPTH        depth of backtrace and chronology for `url. [default: 10]
-  --stable             Database is stable. It doesn't change therefore direct connection will be made to it. (default: False)
+  --time TIME          search TIME instead of URL. [default: 0]
+  --stable             Database is stable. It doesn't change therefore direct connection will be made to it. [default: False]
   --elisp              Output in elisp form. [default: False]
   --visit              Output visited dates for `url. [default: False]
   --chrono             Output chronology for `url. [default: False]
@@ -63,6 +64,12 @@ def getVisitInfo(cur, url):
  return getQueryResults(cur, f"select visit_date, url from mine where url like {url}");
 
 '''
+Get visit date and url for date that is TIME.
+'''
+def getVisitInfoTime(cur, time):
+ return getQueryResults(cur, f"select visit_date, url from mine where visit_date = {time}");
+
+'''
 Get chronological info for VISIT_INFO.
 '''
 def getChrono(cur, visit_info):
@@ -70,8 +77,8 @@ def getChrono(cur, visit_info):
  for date,url in visit_info:
   chrono[date] = {"url": url, "left" : [ ], "right" : []}
   chrono_date = chrono[date]
-  chrono_date["right"] = getQueryResults(cur, f"select url, visit_date from mine where visit_date > {date} limit {DEPTH}")
-  chrono_date["left"] = getQueryResults(cur, f"select url, visit_date from mine where visit_date < {date} order by visit_date desc limit {DEPTH}")
+  chrono_date["right"] = getQueryResults(cur, f"select visit_date, url from mine where visit_date > {date} limit {DEPTH}")
+  chrono_date["left"] = getQueryResults(cur, f"select visit_date, url from mine where visit_date < {date} order by visit_date desc limit {DEPTH}")
   chrono_date["left"] = chrono_date["left"][::-1]
  return chrono;
 
@@ -108,13 +115,13 @@ def print_chrono_normal(chrono):
 
  for date in chrono.keys():
   for url in chrono[date]["left"]:
-   print((dateToString(url[1]), url[0]))
+   print((dateToString(url[0]), url[1]))
 
   print()
   print((dateToString(date), chrono[date]["url"]))
   print()
   for url in chrono[date]["right"]:
-   print((dateToString(url[1]), url[0]))
+   print((dateToString(url[0]), url[1]))
 
   print()
   print()
@@ -182,6 +189,7 @@ def main():
  queryp     = args["--query"]
  visitp     = args["--visit"]
  chronop    = args["--chrono"]
+ time       = int(args["--time"])
 
  if not stable:
   # NOTE: need to check there is no other process making calls to the copy database.
@@ -195,7 +203,11 @@ def main():
  except:
   pass
 
- visit_info = getVisitInfo(cur,url);
+ if time==0:
+  visit_info = getVisitInfo(cur,url);
+ else:
+  visit_info = getVisitInfoTime(cur,time);
+
  chrono = chronop and getChrono(cur, visit_info);
  backtrace = backtracep and getBacktrace(cur,visit_info);
  queryResults = queryp and getQueryResults(cur,query);
