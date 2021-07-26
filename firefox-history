@@ -1,20 +1,7 @@
 #! /usr/bin/env python3
-import sqlite3
-import subprocess
-import shlex
-import argparse
-import textwrap
-from datetime import datetime
+'''
+usage: firefox-history [-h] [--database Database] [--postfix Postfix] [--depth DEPTH] [--stable] [--elisp] [--visit] [--chrono] [--backtrace] [--query] [URL]
 
-################### parse arg #######################
-#doesn't do bound checking on argv
-class RawTextArgumentDefaultsHelpFormatter(
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.RawTextHelpFormatter
-    ):
-        pass
-
-program_description = '''
 Firefox History v0.2
 
 Copyright (C) 2021  Natnael Kahssay
@@ -31,39 +18,35 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+positional arguments:
+  URL                  Url that is to be searched in database.
+                        [default: https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96]
+
+optional arguments:
+  -h, --help           show this help message and exit
+  --database Database  Location of database.
+                        [default: /home/savnkk/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite]
+  --postfix Postfix    Postfix difference between main database and copy database to which sql will connect to.
+                        [default: bak]
+  --depth DEPTH        depth of backtrace and chronology for `url. [default: 10]
+  --stable             Database is stable. It doesn't change therefore direct connection will be made to it. (default: False)
+  --elisp              Output in elisp form. [default: False]
+  --visit              Output visited dates for `url. [default: False]
+  --chrono             Output chronology for `url. [default: False]
+  --backtrace          Output backtrace for `url. [default: False]
+  --query              Output query result for `query by intrepreting `url as a `query. [default: False]
+
+example:
+ firefox-history https://google.com
 '''
 
-example_text = '''example:
- firefox-history https://google.com
- '''
-parser = argparse.ArgumentParser(description=program_description, epilog=example_text, formatter_class=RawTextArgumentDefaultsHelpFormatter)
-parser.add_argument('url', type=str, nargs="?", default="https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96", help=
-                    textwrap.dedent('''\
-Url that is to be searched in database.
-        '''),metavar='Url')
-parser.add_argument('--database', type=str, default="/home/savnkk/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite", help=
-                    textwrap.dedent('''\
-Location of database.
-        '''),metavar='Database')
-parser.add_argument('--postfix', type=str, default="bak", help=
-                    textwrap.dedent('''\
-Postfix difference between main database and copy database to which sql will connect to.
-        '''),metavar='Postfix')
-parser.add_argument('--depth', type=int, default=10, help='''\
-depth of backtrace and chronology for `url.''')
-parser.add_argument('--stable', action="store_true", help='''\
-Database is stable. It doesn't change therefore direct connection will be made to it.''')
-parser.add_argument('--elisp', action="store_true", help='''\
-Output in elisp form.''')
-parser.add_argument('--visit', action="store_true", help='''\
-Output visited dates for `url.''')
-parser.add_argument('--chrono', action="store_true", help='''\
-Output chronology for `url.''')
-parser.add_argument('--backtrace', action="store_true", help='''\
-Output backtrace for `url.''')
-parser.add_argument('--query', action="store_true", help='''\
-Output query result for `query by intrepreting `url as a `query.''')
-################### parse arg #######################
+import sqlite3
+import subprocess
+import shlex
+import textwrap
+from datetime import datetime
+from docopt import docopt
 
 def dateToString(date):
  return(datetime.utcfromtimestamp(date/1000000).strftime('%Y-%m-%d %H:%M:%S'));
@@ -71,8 +54,6 @@ def dateToString(date):
 def getQueryResults(cur, string):
  cur.execute(string);
  ret =  cur.fetchall();
- # if len(ret) > 0 and len(ret[0]) == 1:
- #  ret = list(map(lambda x : x[0], ret))
  return ret;
 
 '''
@@ -189,18 +170,18 @@ def print_iter_elisp(item):
 
 def main():
  global DEPTH
- args       = parser.parse_args()
- query      = args.url
- url        = "'" + args.url + "'"
- database   = args.database
- postfix    = args.postfix
- DEPTH      = args.depth;
- stable     = args.stable
- elisp      = args.elisp
- backtracep = args.backtrace
- queryp     = args.query
- visitp     = args.visit
- chronop    = args.chrono
+ args       = docopt(__doc__, version="Firefox History v0.2")
+ query      = args["URL"] or "https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96"
+ url        = "'" + query + "'"
+ database   = args["--database"]
+ postfix    = args["--postfix"]
+ DEPTH      = args["--depth"]
+ stable     = args["--stable"]
+ elisp      = args["--elisp"]
+ backtracep = args["--backtrace"]
+ queryp     = args["--query"]
+ visitp     = args["--visit"]
+ chronop    = args["--chrono"]
 
  if not stable:
   # NOTE: need to check there is no other process making calls to the copy database.
