@@ -52,6 +52,11 @@
   :type '(boolean)
   :group 'firefox-history)
 
+(defcustom firefox-history-include-url-title 'nil
+  "Show the title of url. Expensive to include url titles. Necessary to make https call."
+  :type '(boolean)
+  :group 'firefox-history)
+
 (defvar firefox-history-url-title-plist 'nil
   "Plist mapping url to title.")
 ;;; mode:
@@ -208,11 +213,29 @@ can be an integer or the symbol `:point'."
      (mapcar #'read it)
      (if (length> it 1)
        (progn
+        ;; NOTE: check if the list is in fact a url-title plist.
        (setq firefox-history-url-title-plist (car (last it)))
        it)
      (setq firefox-history-url-title-plist 'nil)
      it)
      (car it))))
+
+(defun firefox-history-elisp-title (&rest args)
+  "Call `firefox-history' with arguments ARGS.
+Queries for an elisp compatable result.
+Queries for url title if `firefox-history-include-url-title'."
+  (let ((args (-reduce-from (lambda (x y) (concat x " " "\"" y "\"")) "" args)))
+    (--> (shell-command-to-string (concat firefox-history-location " " "--elisp" " " (if firefox-history-include-url-title "--title" "") " " args))
+         (split-string it "\n" 't)
+         (mapcar #'read it)
+         (if (length> it 1)
+             (progn
+               ;; NOTE: check if the list is in fact a url-title plist.
+               (setq firefox-history-url-title-plist (car (last it)))
+               it)
+           (setq firefox-history-url-title-plist 'nil)
+           it)
+         (car it))))
 
 (defun firefox-history-version ()
   "Get `firefox-history' version."
@@ -220,19 +243,19 @@ can be an integer or the symbol `:point'."
 
 (defun firefox-history-visit (url)
   "Get `firefox-history' ."
-    (firefox-history "--elisp" "--visit" "--title" url))
+    (firefox-history-elisp-title "--visit" url))
 
 (defun firefox-history-visit-lister (url)
   "Get `firefox-history' ."
   (-some--> (mapcar #'firefox-history-item (firefox-history-visit url))
-    (firefox-history-new-buffer it)))
+    (firefox-history-new-buffer it "Visited dates")))
 
 (defun firefox-history-chrono (visit-date)
   "Get `firefox-history' ."
   (let ((visit-date (cond
                       ((stringp visit-date) visit-date)
                       ((numberp visit-date) (number-to-string visit-date)))))
-  (-some--> (firefox-history "--elisp" "--chrono" "--title" "--time" visit-date)
+  (-some--> (firefox-history-elisp-title "--chrono" "--time" visit-date)
   (firefox-history-parse-chronology it)
   (firefox-history-new-buffer it "Chronology"))))
 
@@ -241,7 +264,7 @@ can be an integer or the symbol `:point'."
   (let ((visit-date (cond
                      ((stringp visit-date) visit-date)
                      ((numberp visit-date) (number-to-string visit-date)))))
-    (-some--> (firefox-history "--elisp" "--backtrace" "--title" "--time" visit-date)
+    (-some--> (firefox-history-elisp-title "--backtrace" "--time" visit-date)
       (firefox-history-parse-backtrace it))))
 
 (defun firefox-history-backtrace-new-buffer (visit-date)
@@ -348,9 +371,7 @@ The new buffer name will be created by using
       (--> (helm :sources (helm-build-sync-source "firefox history"
                             :candidates (reverse visited-dates) :filtered-candidate-transformer))
            (firefox-history-item-time it)
-           (firefox-history-chrono it)
-
-           ))))
+           (firefox-history-chrono it)))))
 
 (defun firefox-history--org-protocol (info)
   "Process an org-protocol://firefox-history?ref= style url with INFO.
