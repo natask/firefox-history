@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
+# coding= utf-8
 '''
-usage: firefox-history [-h] [--database Database] [--postfix Postfix] [--depth DEPTH] [--stable] [--elisp] [--visit] [--chrono] [--backtrace] [--query] [URL] [--time TIME] [--title] [--timeout TIMEOUT]
+usage: firefox-history [-h] [--database Database] [--postfix Postfix] [--depth DEPTH] [--stable] [--elisp] [--visit] [--chrono] [--backtrace] [--query] [--title] [--timeout TIMEOUT] [URL] [--time TIME]
 
 Firefox History v0.2
 
@@ -43,13 +44,28 @@ optional arguments:
 example:
  firefox-history https://google.com
 '''
-
+from multiprocessing import Pool
 import sqlite3
 import subprocess
 import shlex
 import textwrap
 from datetime import datetime
 from docopt import docopt
+
+## title from url
+def getUrlTitle(url):
+    return subprocess.getoutput("xidel " + url + "  -s --extract //title | head -1")
+def process_data(url):
+ try:
+  return getUrlTitle("\"" + url + "\"")
+ except:
+  return url;
+
+def get_titles(urls):
+ pool_len = len(urls)
+ with Pool(pool_len) as p:
+  return p.map(process_data, urls)
+##
 
 def dateToString(date):
  return(datetime.utcfromtimestamp(date/1000000).strftime('%Y-%m-%d %H:%M:%S'));
@@ -59,28 +75,37 @@ def getQueryResults(cur, string):
  ret =  cur.fetchall();
  return ret;
 
+def getDateUrlTitle(cur, string):
+ ret = getQueryResults(cur, "select visit_date, url from mine " + string);
+ if TITLEP and ret:
+  urls = [item[1] for item in ret]
+  titles = get_titles(urls)
+  ret = [item + (title,) for item,title in zip(ret, titles)]
+ return ret;
+
 '''
 Get visit date and url for urls that are like URL.
 '''
 def getVisitInfo(cur, url):
- return getQueryResults(cur, f"select visit_date, url from mine where url like {url}");
+ return getDateUrlTitle(cur, f"where url like {url}");
 
 '''
 Get visit date and url for date that is TIME.
 '''
 def getVisitInfoTime(cur, time):
- return getQueryResults(cur, f"select visit_date, url from mine where visit_date = {time}");
+ return getDateUrlTitle(cur, f"where visit_date = {time}");
 
 '''
 Get chronological info for VISIT_INFO.
 '''
 def getChrono(cur, visit_info):
  chrono = {};
- for date,url in visit_info:
-  chrono[date] = {"url": url, "left" : [ ], "right" : []}
+ for item in visit_info:
+  date = item[0]
+  chrono[date] = {"item": item, "left" : [ ], "right" : []}
   chrono_date = chrono[date]
-  chrono_date["right"] = getQueryResults(cur, f"select visit_date, url from mine where visit_date > {date} limit {DEPTH}")
-  chrono_date["left"] = getQueryResults(cur, f"select visit_date, url from mine where visit_date < {date} order by visit_date desc limit {DEPTH}")
+  chrono_date["right"] = getDateUrlTitle(cur, f"where visit_date > {date} limit {DEPTH}")
+  chrono_date["left"] = getDateUrlTitle(cur, f"where visit_date < {date} order by visit_date desc limit {DEPTH}")
   chrono_date["left"] = chrono_date["left"][::-1]
  return chrono;
 
@@ -94,7 +119,7 @@ def getBacktrace(cur, visit_info):
   if res := cur.fetchone():
    hid = res[0]
 
-   backtrace[date] = {"url": url, "backtrace": []}
+   backtrace[date] = {"item": visit_info, "backtrace": []}
    backtrace_date = backtrace[date]["backtrace"]
    depth = 0;
    while hid != 0 or depth < DEPTH:
@@ -106,7 +131,7 @@ def getBacktrace(cur, visit_info):
      hid = 0;
 
     if (hid != 0):
-     backtrace_date += getQueryResults(cur, f"select visit_date,url from mine where hid={hid}")
+     backtrace_date += getDateUrlTitle(cur, f"where hid={hid}")
 
  return backtrace;
 
@@ -116,20 +141,19 @@ def print_chrono_normal(chrono):
  print("##############################")
 
  for date in chrono.keys():
-  for url in chrono[date]["left"]:
-   print((dateToString(url[0]), url[1]))
+  for item in chrono[date]["left"]:
+   print(dateToString(item[0]), item)
 
   print()
-  print((dateToString(date), chrono[date]["url"]))
+  print(dateToString(date), chrono[date]["item"])
   print()
-  for url in chrono[date]["right"]:
-   print((dateToString(url[0]), url[1]))
+  for item in chrono[date]["right"]:
+   print(dateToString(item[0]), item)
 
   print()
   print()
   print()
   print("##############################")
-  print(len(chrono) * int(DEPTH))
 
 def print_backtrace_normal(backtrace):
  print()
@@ -179,7 +203,7 @@ def print_iter_elisp(item):
  print();
 
 def main():
- global DEPTH
+ global DEPTH, TITLEP, TIMEOUT
  args       = docopt(__doc__, version="Firefox History v0.2")
  query      = args["URL"] or "https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96"
  url        = "'" + query + "'"
@@ -193,6 +217,8 @@ def main():
  visitp     = args["--visit"]
  chronop    = args["--chrono"]
  time       = int(args["--time"])
+ TITLEP     = args["--title"]
+ TIMEOUT    = float(args["--timeout"])
 
  if not stable:
   # NOTE: need to check there is no other process making calls to the copy database.
