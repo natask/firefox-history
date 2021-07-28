@@ -44,32 +44,50 @@ optional arguments:
 example:
  firefox-history https://google.com
 '''
-from multiprocessing import Pool
 import sqlite3
 import subprocess
 import shlex
-import textwrap
-import urllib.request as urllib
-from lxml.html import document_fromstring
 from datetime import datetime
 from docopt import docopt
 
 ## title from url
+import urllib.request as urllib
+from lxml.html import document_fromstring
+from multiprocessing import Pool
+
 def getUrlTitle(url):
     page = urllib.urlopen(url, timeout=TIMEOUT).read().decode('utf-8')
     p = document_fromstring(page)
     return p.find(".//title").text
+
 def process_data(url):
  try:
   return getUrlTitle(url)
  except:
   return url;
 
-def get_titles(urls):
+def process_data_subprocess(url):
+ try:
+  res = subprocess.getoutput("xidel " + "\"" + url + "\"" + "  -s --extract //title --error-handling=500| head -1")
+  if "Error:\nInternet/HTTP Error" in res:
+    res = url;
+  return res;
+ except:
+  return url;
+
+def get_titles_subprocess(urls):
+ pool_len = len(urls)
+ with Pool(pool_len) as p:
+  return p.map(process_data_subprocess, urls)
+
+def get_titles_python(urls):
  pool_len = len(urls)
  with Pool(pool_len) as p:
   return p.map(process_data, urls)
-##
+
+# import urlTitle
+# def get_titles_cpp(urls):
+#  return urlTitle.urlTitle_getUrlTitles(urls);
 
 def dateToString(date):
  return(datetime.utcfromtimestamp(date/1000000).strftime('%Y-%m-%d %H:%M:%S'));
@@ -81,35 +99,44 @@ def getQueryResults(cur, string):
 
 def getDateUrlTitle(cur, string):
  ret = getQueryResults(cur, "select visit_date, url from mine " + string);
+ urls = {};
  if TITLEP and ret:
-  urls = [item[1] for item in ret]
-  titles = get_titles(urls)
-  ret = [item + (title,) for item,title in zip(ret, titles)]
- return ret;
+  urls = {item[1] for item in ret}
+ return (ret, urls);
 
 '''
 Get visit date and url for urls that are like URL.
 '''
 def getVisitInfo(cur, url):
- return getDateUrlTitle(cur, f"where url like {url}");
+ global URLS
+ ret, urls =  getDateUrlTitle(cur, f"where url like {url}");
+ URLS.update(urls);
+ return ret;
 
 '''
 Get visit date and url for date that is TIME.
 '''
 def getVisitInfoTime(cur, time):
- return getDateUrlTitle(cur, f"where visit_date = {time}");
+ global URLS
+ ret, urls=  getDateUrlTitle(cur, f"where visit_date = {time}");
+ URLS.update(urls);
+ return ret;
+
 
 '''
 Get chronological info for VISIT_INFO.
 '''
 def getChrono(cur, visit_info):
+ global URLS
  chrono = {};
  for item in visit_info:
   date = item[0]
   chrono[date] = {"item": item, "left" : [ ], "right" : []}
   chrono_date = chrono[date]
-  chrono_date["right"] = getDateUrlTitle(cur, f"where visit_date > {date} limit {DEPTH}")
-  chrono_date["left"] = getDateUrlTitle(cur, f"where visit_date < {date} order by visit_date desc limit {DEPTH}")
+  chrono_date["right"],urls_right = getDateUrlTitle(cur, f"where visit_date > {date} limit {DEPTH}")
+  chrono_date["left"], urls_left = getDateUrlTitle(cur, f"where visit_date < {date} order by visit_date desc limit {DEPTH}")
+  URLS.update(urls_left)
+  URLS.update(urls_right)
   chrono_date["left"] = chrono_date["left"][::-1]
  return chrono;
 
@@ -117,6 +144,7 @@ def getChrono(cur, visit_info):
 Get backtrace info for VISIT_INFO.
 '''
 def getBacktrace(cur, visit_info):
+ global URLS
  backtrace = {}
  for item in visit_info:
   date = item[0]
@@ -136,7 +164,10 @@ def getBacktrace(cur, visit_info):
      hid = 0;
 
     if (hid != 0):
-     backtrace_date += getDateUrlTitle(cur, f"where hid={hid}")
+     res, urls = getDateUrlTitle(cur, f"where hid={hid}")
+     backtrace_date += (res)
+     URLS.update(urls)
+
 
  return backtrace;
 
@@ -185,20 +216,20 @@ def print_iter_elisp_helper(item):
  if not is_iterable(item):
   print(item, end=" ")
  elif type(item) == type(""):
-  print("\"" + item + "\"", end=" ")
+  print("\"" + item.strip() + "\"", end=" ")
  elif type(item) == type({}):
   print("(", end="");
   for val in item:
    print("(", end="");
-   print_iter_elisp(val);
-   print_iter_elisp(item[val]);
+   print_iter_elisp_helper(val);
+   print_iter_elisp_helper(item[val]);
    print(")", end=" ");
 
   print(")", end="")
  else: #type(item) == type([])
   print("(", end="");
   for val in item:
-   print_iter_elisp(val);
+   print_iter_elisp_helper(val);
 
   print(")", end= "")
 
@@ -208,7 +239,7 @@ def print_iter_elisp(item):
  print();
 
 def main():
- global DEPTH, TITLEP, TIMEOUT
+ global DEPTH, TITLEP, TIMEOUT, URLS
  args       = docopt(__doc__, version="Firefox History v0.2")
  query      = args["URL"] or "https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96"
  url        = "'" + query + "'"
@@ -225,6 +256,7 @@ def main():
  TITLEP     = args["--title"]
  TIMEOUT    = float(args["--timeout"])
 
+ URLS = set()
  if not stable:
   # NOTE: need to check there is no other process making calls to the copy database.
   subprocess.call(shlex.split(f"cp {database} {database + '.' + postfix}"))
@@ -245,17 +277,21 @@ def main():
  chrono = chronop and getChrono(cur, visit_info);
  backtrace = backtracep and getBacktrace(cur,visit_info);
  queryResults = queryp and getQueryResults(cur,query);
+ url_title = TITLEP and [alternate for url_title in zip(URLS, get_titles_subprocess(URLS)) for alternate in url_title]
+
 
  if not elisp:
   queryp and print(queryResults);
   visitp and  print(visit_info);
   chronop and print_chrono_normal(chrono);
   backtracep and print_backtrace_normal(backtrace);
+  TITLEP and  print(url_title);
  else:
   queryp and print_iter_elisp(queryResults);
   visitp and print_iter_elisp(visit_info);
   chronop and print_iter_elisp(chrono);
   backtracep and print_iter_elisp(backtrace);
+  TITLEP and print_iter_elisp(url_title);
 
  cur.close()
 

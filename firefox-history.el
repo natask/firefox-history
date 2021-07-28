@@ -52,7 +52,10 @@
   :type '(boolean)
   :group 'firefox-history)
 
+(defvar firefox-history-url-title-plist 'nil
+  "Plist mapping url to title.")
 ;;; mode:
+
 (defvar firefox-history-mode-map
   (let ((map (make-sparse-keymap)))
     ;; inherit standard key bindings:
@@ -177,7 +180,7 @@ See `firefox-history-pp-line' for possible values.")
 	(lister-remove-sublist-below buf pos)
       (firefox-history-expand-and-insert buf pos))))
 
-(defun firefox-expand-and-insert (buf pos)
+(defun firefox-history-expand-and-insert (buf pos)
   "Determine expansion operators and insert results for item at POS.
 Determine the expansion operator for the item at the indicated
 position, collect the results and insert them as sublist.
@@ -200,8 +203,16 @@ can be an integer or the symbol `:point'."
 (defun firefox-history (&rest args)
   "Call `firefox-history' with arguments ARGS."
   (let ((args (-reduce-from (lambda (x y) (concat x " " "\"" y "\"")) "" args)))
-    (read
-     (shell-command-to-string (concat firefox-history-location " " args)))))
+    (--> (shell-command-to-string (concat firefox-history-location " " args))
+     (split-string it "\n" 't)
+     (mapcar #'read it)
+     (if (length> it 1)
+       (progn
+       (setq firefox-history-url-title-plist (car (last it)))
+       it)
+     (setq firefox-history-url-title-plist 'nil)
+     it)
+     (car it))))
 
 (defun firefox-history-version ()
   "Get `firefox-history' version."
@@ -263,7 +274,9 @@ HEAD signifies the search target."
          (timestamp (->> time
                          firefox-history-unix-time-to-seconds
                          firefox-history-unix-time-to-timestamp))
-         (title (caddr item)))
+         (title (if firefox-history-url-title-plist
+                    (lax-plist-get firefox-history-url-title-plist url)
+                  url)))
     (firefox-history-make-item
      :time time
      :timestamp timestamp
@@ -276,9 +289,9 @@ HEAD signifies the search target."
 Parses CHRONO for `lister' consumption."
   (cl-loop for entry in chrono
            collect (let*  ((chrono-of-item (-flatten-n 2 (cdr entry)))
-                           (main-url (list (firefox-history-item (nth 1 chrono-of-item) 't)))
-                           (left (mapcar #'firefox-history-item (nth 3 chrono-of-item)))
-                           (right (mapcar #'firefox-history-item (nth 5 chrono-of-item))))
+                           (main-url (list (firefox-history-item (lax-plist-get chrono-of-item "item") 't)))
+                           (left (mapcar #'firefox-history-item (lax-plist-get chrono-of-item "left")))
+                           (right (mapcar #'firefox-history-item (lax-plist-get chrono-of-item "right"))))
                      (append left main-url right))))
 
 (defun  firefox-history-parse-backtrace (backtr)
@@ -286,8 +299,8 @@ Parses CHRONO for `lister' consumption."
 Parses BACKTR for `lister' consumption."
   (cl-loop for entry in backtr
            collect (let*  ((item (-flatten-n 2 (cdr entry)))
-                           (main-url (list (firefox-history-item (nth 1 item) 't)))
-                           (backtrace-of-item (mapcar #'firefox-history-item (nth 3 item))))
+                           (main-url (list (firefox-history-item (lax-plist-get item "item") 't)))
+                           (backtrace-of-item (mapcar #'firefox-history-item (lax-plist-get item "backtrace"))))
                      (append main-url backtrace-of-item))))
 
 (defun firefox-history-new-buffer (items &optional heading buffer-name)
