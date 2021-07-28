@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 '''
-usage: firefox-history [-h] [--database Database] [--postfix Postfix] [--depth DEPTH] [--stable] [--elisp] [--visit] [--chrono] [--backtrace] [--query] [URL] [--time TIME]
+usage: firefox-history [-h] [--database Database] [--postfix Postfix] [--depth DEPTH] [--stable] [--elisp] [--visit] [--chrono] [--backtrace] [--query] [URL] [--time TIME] [--title] [--timeout TIMEOUT]
 
 Firefox History v0.2
 
@@ -37,6 +37,8 @@ optional arguments:
   --chrono             Output chronology for `url. [default: False]
   --backtrace          Output backtrace for `url. [default: False]
   --query              Output query result for `query by intrepreting `url as a `query. [default: False]
+  --title              Include url title in output. Costly because need to make url query. [default: False]
+  --timeout TIMEOUT    timeout for url title query. [default: 0.5]
 
 example:
  firefox-history https://google.com
@@ -127,6 +129,7 @@ def print_chrono_normal(chrono):
   print()
   print()
   print("##############################")
+  print(len(chrono) * int(DEPTH))
 
 def print_backtrace_normal(backtrace):
  print()
