@@ -49,15 +49,19 @@ import sqlite3
 import subprocess
 import shlex
 import textwrap
+import urllib.request as urllib
+from lxml.html import document_fromstring
 from datetime import datetime
 from docopt import docopt
 
 ## title from url
 def getUrlTitle(url):
-    return subprocess.getoutput("xidel " + url + "  -s --extract //title | head -1")
+    page = urllib.urlopen(url, timeout=TIMEOUT).read().decode('utf-8')
+    p = document_fromstring(page)
+    return p.find(".//title").text
 def process_data(url):
  try:
-  return getUrlTitle("\"" + url + "\"")
+  return getUrlTitle(url)
  except:
   return url;
 
@@ -114,12 +118,13 @@ Get backtrace info for VISIT_INFO.
 '''
 def getBacktrace(cur, visit_info):
  backtrace = {}
- for date,url in visit_info:
+ for item in visit_info:
+  date = item[0]
   res = cur.execute(f"select hid from mine where visit_date = {date} limit 10")
   if res := cur.fetchone():
    hid = res[0]
 
-   backtrace[date] = {"item": visit_info, "backtrace": []}
+   backtrace[date] = {"item": item, "backtrace": []}
    backtrace_date = backtrace[date]["backtrace"]
    depth = 0;
    while hid != 0 or depth < DEPTH:
@@ -209,7 +214,7 @@ def main():
  url        = "'" + query + "'"
  database   = args["--database"]
  postfix    = args["--postfix"]
- DEPTH      = args["--depth"]
+ DEPTH      = int(args["--depth"])
  stable     = args["--stable"]
  elisp      = args["--elisp"]
  backtracep = args["--backtrace"]

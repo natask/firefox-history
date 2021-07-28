@@ -63,11 +63,23 @@
                              lister-mode-map))
     map))
 
+(evil-define-key* '(normal insert) firefox-history-mode-map
+  (kbd "<return>") #'firefox-history-expand-toggle-sublist
+  (kbd "<tab>") #'firefox-history-expand-toggle-sublist
+  (kbd "b") #'firefox-history-item-backtrace
+  (kbd "c") #'firefox-history-item-chrono
+  (kbd "v") #'firefox-history-item-visit
+  (kbd "yt") #'firefox-history-item-yank-time
+  (kbd "yy") #'firefox-history-item-yank-url
+  (kbd "yu") #'firefox-history-item-yank-url
+  (kbd "r") #'firefox-history-reverse-buffer
+  (kbd "i") #'firefox-history-reverse-buffer)
+
 (define-derived-mode firefox-history-mode
   lister-mode "Firefox-history"
   "Major mode for browsing firefox history."
   ;; Setup lister first since it deletes all local vars:
-  (lister-setup	(current-buffer) #'list
+  (lister-setup	(current-buffer) #'firefox-history-lister-view
                         nil
                         (concat "firefox history Version " (firefox-history-version)))
   ;; --- Now add delve specific stuff:
@@ -94,6 +106,96 @@
   "Pretty printing scheme for displaying firefox history item.
 See `firefox-history-pp-line' for possible values.")
 
+;;; lister functions:
+(defun firefox-history-reverse-buffer (buf)
+  "Refresh all items in BUF."
+  (interactive (list (current-buffer)))
+  (lister-reorder-dwim buf (point) 'reverse))
+
+;; Act on the item at point
+
+(defun firefox-history-item-chrono (buf pos)
+  "Chronology of item in BUF at point POS."
+  (interactive (list (current-buffer) (point)))
+  (unless (lister-item-p buf pos)
+    (user-error "No item to visit"))
+  (let ((data (lister-get-data buf pos)))
+    (pcase data
+      ((pred firefox-history-item-p) (firefox-history-chrono (firefox-history-item-time data)))
+      (_                     (error "Cannot visit this item")))))
+
+(defun firefox-history-item-backtrace (buf pos)
+  "backtrace of item in BUF at point POS."
+  (interactive (list (current-buffer) (point)))
+  (unless (lister-item-p buf pos)
+    (user-error "No item to visit"))
+  (let ((data (lister-get-data buf pos)))
+    (pcase data
+      ((pred firefox-history-item-p) (firefox-history-backtrace-new-buffer (firefox-history-item-time data)))
+      (_                     (error "Cannot visit this item")))))
+
+(defun firefox-history-yank-evil (item)
+  (evil-set-register ?* item)
+  (message "%s" item))
+
+(defun firefox-history-item-yank-time (buf pos)
+  "time of item in BUF at point POS."
+  (interactive (list (current-buffer) (point)))
+  (unless (lister-item-p buf pos)
+    (user-error "No item to visit"))
+  (let ((data (lister-get-data buf pos)))
+    (pcase data
+      ((pred firefox-history-item-p) (firefox-history-yank-evil (number-to-string (firefox-history-item-time data))))
+      (_                     (error "Cannot visit this item")))))
+
+(defun firefox-history-item-yank-url (buf pos)
+  "url of item in BUF at point POS."
+  (interactive (list (current-buffer) (point)))
+  (unless (lister-item-p buf pos)
+    (user-error "No item to visit"))
+  (let ((data (lister-get-data buf pos)))
+    (pcase data
+      ((pred firefox-history-item-p) (firefox-history-yank-evil (firefox-history-item-url data)))
+      (_                     (error "Cannot visit this item")))))
+
+(defun firefox-history-item-visit (buf pos)
+  "Visit dates of item in BUF at point POS."
+  (interactive (list (current-buffer) (point)))
+  (unless (lister-item-p buf pos)
+    (user-error "No item to visit"))
+  (let ((data (lister-get-data buf pos)))
+    (pcase data
+      ((pred firefox-history-item-p) (firefox-history-visit-lister (firefox-history-item-url data)))
+      (_                     (error "Cannot visit this item")))))
+
+(defun firefox-history-expand-toggle-sublist ()
+  "Close or open the item's sublist at point."
+  (interactive)
+  (let* ((buf (current-buffer))
+	 (pos (point)))
+    (if (lister-sublist-below-p buf pos)
+	(lister-remove-sublist-below buf pos)
+      (firefox-history-expand-and-insert buf pos))))
+
+(defun firefox-expand-and-insert (buf pos)
+  "Determine expansion operators and insert results for item at POS.
+Determine the expansion operator for the item at the indicated
+position, collect the results and insert them as sublist.
+
+BUF must be a valid lister buffer populated with delve items. POS
+can be an integer or the symbol `:point'."
+  (interactive (list (current-buffer) (point)))
+  (let* ((position (pcase pos
+		     ((and (pred integerp) pos) pos)
+		     (:point (with-current-buffer buf (point)))
+		     (_ (error "Invalid value for POS: %s" pos))))
+	 (item     (lister-get-data buf position))
+	 (sublist  (firefox-history-backtrace (firefox-history-item-time item))))
+    (if sublist
+	(with-temp-message "Inserting expansion results..."
+	  (lister-insert-sublist-below buf position sublist))
+      (user-error "No expansion found"))))
+
 ;;; Code:
 (defun firefox-history (&rest args)
   "Call `firefox-history' with arguments ARGS."
@@ -105,23 +207,53 @@ See `firefox-history-pp-line' for possible values.")
   "Get `firefox-history' version."
   (string-trim (shell-command-to-string (concat firefox-history-location " " "--version"))))
 
+(defun firefox-history-visit (url)
+  "Get `firefox-history' ."
+    (firefox-history "--elisp" "--visit" "--title" url))
+
+(defun firefox-history-visit-lister (url)
+  "Get `firefox-history' ."
+  (-some--> (mapcar #'firefox-history-item (firefox-history-visit url))
+    (firefox-history-new-buffer it)))
+
+(defun firefox-history-chrono (visit-date)
+  "Get `firefox-history' ."
+  (let ((visit-date (cond
+                      ((stringp visit-date) visit-date)
+                      ((numberp visit-date) (number-to-string visit-date)))))
+  (-some--> (firefox-history "--elisp" "--chrono" "--title" "--time" visit-date)
+  (firefox-history-parse-chronology it)
+  (firefox-history-new-buffer it "Chronology"))))
+
+(defun firefox-history-backtrace (visit-date)
+  "Get `firefox-history' ."
+  (let ((visit-date (cond
+                     ((stringp visit-date) visit-date)
+                     ((numberp visit-date) (number-to-string visit-date)))))
+    (-some--> (firefox-history "--elisp" "--backtrace" "--title" "--time" visit-date)
+      (firefox-history-parse-backtrace it))))
+
+(defun firefox-history-backtrace-new-buffer (visit-date)
+  "Get `firefox-history' ."
+  (when-let ((backtr (firefox-history-backtrace visit-date)))
+      (firefox-history-new-buffer backtr "Backtrace")))
+
 (defun firefox-history-check-if-visited (url)
   "Check if URL has been visited in the past by querying firefox database."
   (mapcar (lambda (x) (let* ((item (firefox-history-item x))
-                             (timestamp (plist-get item :timestamp))
-                             (title (plist-get item :title)))
+                             (timestamp (firefox-history-item-timestamp item))
+                             (title (firefox-history-item-title item)))
                         (cons (concat timestamp " " title) item)))
-          (firefox-history "--elisp" "--visit" "--title" url)))
+          (firefox-history-visit url)))
 
-(defun firefox-history-lister-view (item)
-  "Convert ITEM to lister consumiable list."
-  (mapcar (lambda (chrono) (mapcar (lambda (entry) (let* ((time (number-to-string (plist-get entry :time)))
-                                 (url (plist-get entry :url))
-                                 (timestamp (plist-get entry :timestamp))
-                                 (title (plist-get entry :title))
-                                 (head (plist-get entry :head)))
-                                (concat  (propertize timestamp 'face 'org-clock-overlay) " " (propertize title 'face (if head 'doom-dashboard-menu-title 'org-document-title)) " " time))) chrono))
-          item))
+(defun firefox-history-lister-view (entry)
+  "Convert ENTRY to lister viewable string."
+  (let* ((time (number-to-string (firefox-history-item-time entry)))
+                                 (url (firefox-history-item-url entry))
+                                 (timestamp (firefox-history-item-timestamp entry))
+                                 (title (firefox-history-item-title entry))
+                                 (head (firefox-history-item-head entry)))
+                                (concat  (propertize timestamp 'face 'org-clock-overlay) " " (propertize title 'face (if head 'doom-dashboard-menu-title 'org-document-title)))))
 
 (defun firefox-history-item (item &optional head)
   "Create firefox history item from ITEM.
@@ -132,7 +264,7 @@ HEAD signifies the search target."
                          firefox-history-unix-time-to-seconds
                          firefox-history-unix-time-to-timestamp))
          (title (caddr item)))
-    (list
+    (firefox-history-make-item
      :time time
      :timestamp timestamp
      :url url
@@ -149,6 +281,15 @@ Parses CHRONO for `lister' consumption."
                            (right (mapcar #'firefox-history-item (nth 5 chrono-of-item))))
                      (append left main-url right))))
 
+(defun  firefox-history-parse-backtrace (backtr)
+  "Receives a nested property list BACKTR of with `time' literal, under it `item' and `backtrace'.
+Parses BACKTR for `lister' consumption."
+  (cl-loop for entry in backtr
+           collect (let*  ((item (-flatten-n 2 (cdr entry)))
+                           (main-url (list (firefox-history-item (nth 1 item) 't)))
+                           (backtrace-of-item (mapcar #'firefox-history-item (nth 3 item))))
+                     (append main-url backtrace-of-item))))
+
 (defun firefox-history-new-buffer (items &optional heading buffer-name)
   "List firefox history ITEMS in a new buffer.
 
@@ -164,7 +305,7 @@ The new buffer name will be created by using
       (firefox-history-mode)
       (lister-set-list buf items)
                                         ;(setq-local delve-local-initial-list items)
-                                        ;(lister-set-header buf heading)
+      (lister-set-header buf heading)
       (lister-goto buf :first)
       (lister-highlight-mode))
     (switch-to-buffer buf)
@@ -193,12 +334,9 @@ The new buffer name will be created by using
       (if fn (funcall fn))
       (--> (helm :sources (helm-build-sync-source "firefox history"
                             :candidates (reverse visited-dates) :filtered-candidate-transformer))
-           (plist-get it :time)
-           (number-to-string it)
-           (firefox-history "--elisp" "--chrono" "--title" "--time" it)
-           (firefox-history-parse-chronology it)
-           (firefox-history-lister-view it)
-           (firefox-history-new-buffer it)
+           (firefox-history-item-time it)
+           (firefox-history-chrono it)
+
            ))))
 
 (defun firefox-history--org-protocol (info)

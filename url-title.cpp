@@ -203,7 +203,7 @@ static void parseHtml(const std::string &html, std::string &title) {
   Context context;
 
   ctxt = htmlCreatePushParserCtxt(&saxHandler, &context, "", 0, "",
-                                  XML_CHAR_ENCODING_NONE);
+                                  XML_CHAR_ENCODING_UTF8);
 
   htmlParseChunk(ctxt, html.c_str(), html.size(), 0);
   htmlParseChunk(ctxt, "", 0, 1);
@@ -247,9 +247,18 @@ void threadMod(std::size_t idx, std::string url) {
   titles[idx] = title;
 }
 
+inline unsigned int to_uint(char ch)
+{
+  // EDIT: multi-cast fix as per David Hammen's comment
+  return static_cast<unsigned int>(static_cast<unsigned char>(ch));
+}
+
 int main(int argc, char *argv[]) {
   std::vector<std::string> urls{
-  "https://www.google.com/search?q=mlperf&client=firefox-b-1-d&ei=HY7NYN6gCInx-wS0-qbIDQ&oq=mlperf&gs_lcp=Cgdnd3Mtd2l6EAMyBQgAELEDMgIIADICCAAyAggAMgIIADICCAAyAggAMgIIADICCAAyAggAOggIABDqAhCPAToOCC4QxwEQowIQkQIQkwI6BQgAEJECOggILhCxAxCDAToLCC4QsQMQxwEQowI6CAgAELEDEIMBOgIILjoICAAQsQMQkQI6CAguEMcBEKMCOg4ILhDHARCvARCRAhCTAjoFCC4QsQM6CAguELEDEJMCSgUIOBIBMVDoBVjTHmD5H2gCcAB4AIABtwGIAYQGkgEDNi4ymAEAoAEBqgEHZ3dzLXdperABCsABAQ&sclient=gws-wiz&ved=0ahUKEwieo_CtiKPxAhWJ-J4KHTS9CdkQ4dUDCA4&uact=5",
+  "https://www.google.com/search?q=jethro+pronunciation&client=firefox-b-1-d&ei=DEL-YIX5Ac6l-wSumIXoAQ&oq=Jethro+pron&gs_lcp=Cgdnd3Mtd2l6EAMYADIFCAAQkQIyBggAEBYQHjIGCAAQFhAeMgYIABAWEB4yBggAEBYQHjIFCAAQhgM6BwgAELADEA06CwgAELADEAgQDRAeOggIABCwAxCGAzoFCC4QkQI6AgguOgIIADoICC4QxwEQrwFKBQhAEgExSgQIQRgBULgKWNAQYN0VaAFwAHgAgAF4iAHMBJIBAzQuMpgBAKABAaoBB2d3cy13aXrIAQXAAQE&sclient=gws-wiz",
+  "https://www.google.com/search?q=Jethro+defination&client=firefox-b-1-d&ei=AUL-YJ2pNsbh-gSKr6SYBQ&oq=Jethro+defination&gs_lcp=Cgdnd3Mtd2l6EAMyBAgAEA0yCAgAEAgQDRAeMggIABAIEA0QHjIICAAQCBANEB4yBQgAEIYDOggIABCwAxCRAjoLCAAQsQMQgwEQsAM6CAgAELEDELADOgkIABCwAxAHEB46BQgAELADOhEILhCxAxCwAxDIAxCRAhCTAjoLCC4QsQMQsAMQyAM6EAguEMcBEK8BELADEMgDEAM6CAguELADEMgDOgoILhCxAxBDEJMCOgQILhBDOgQIABBDOggIABCxAxCDAToHCAAQsQMQQzoFCAAQsQM6BQguELEDOgUILhCTAjoCCAA6AgguOgQIABAKOgYIABAWEB46CAgAEBYQChAeSgUIOBIBMUoECEEYAVClNFizQmC_RGgBcAB4AIABqAGIAaUIkgEDOS4zmAEAoAEBqgEHZ3dzLXdpesgBD8ABAQ&sclient=gws-wiz&ved=0ahUKEwjdrcXV-v_xAhXGsJ4KHYoXCVMQ4dUDCA4&uact=5",
+  "https://www.google.com/search?client=firefox-b-1-d&q=Jethro" ,
+"https://www.google.com/search?q=mlperf&client=firefox-b-1-d&ei=HY7NYN6gCInx-wS0-qbIDQ&oq=mlperf&gs_lcp=Cgdnd3Mtd2l6EAMyBQgAELEDMgIIADICCAAyAggAMgIIADICCAAyAggAMgIIADICCAAyAggAOggIABDqAhCPAToOCC4QxwEQowIQkQIQkwI6BQgAEJECOggILhCxAxCDAToLCC4QsQMQxwEQowI6CAgAELEDEIMBOgIILjoICAAQsQMQkQI6CAguEMcBEKMCOg4ILhDHARCvARCRAhCTAjoFCC4QsQM6CAguELEDEJMCSgUIOBIBMVDoBVjTHmD5H2gCcAB4AIABtwGIAYQGkgEDNi4ymAEAoAEBqgEHZ3dzLXdperABCsABAQ&sclient=gws-wiz&ved=0ahUKEwieo_CtiKPxAhWJ-J4KHTS9CdkQ4dUDCA4&uact=5",
       "https://www.youtube.com/channel/UCRXFk3Ow6PdyqYUCOeEe8ag",
       "https://www.youtube.com/watch?v=CS-GK6xS8-4",
       "https://www.youtube.com/",
