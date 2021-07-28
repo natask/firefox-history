@@ -80,6 +80,7 @@
   (kbd "yt") #'firefox-history-item-yank-time
   (kbd "yy") #'firefox-history-item-yank-url
   (kbd "yu") #'firefox-history-item-yank-url
+  (kbd "yo") #'firefox-history-item-yank-url-org
   (kbd "r") #'firefox-history-reverse-buffer
   (kbd "i") #'firefox-history-reverse-buffer)
 
@@ -118,7 +119,7 @@ See `firefox-history-pp-line' for possible values.")
 (defun firefox-history-reverse-buffer (buf)
   "Refresh all items in BUF."
   (interactive (list (current-buffer)))
-  (lister-reorder-dwim buf (point) 'reverse))
+  (lister-reorder-this-level buf (point) 'reverse))
 
 ;; Act on the item at point
 
@@ -166,6 +167,16 @@ See `firefox-history-pp-line' for possible values.")
       ((pred firefox-history-item-p) (firefox-history-yank-evil (firefox-history-item-url data)))
       (_                     (error "Cannot visit this item")))))
 
+(defun firefox-history-item-yank-url-org (buf pos)
+  "url of item in org format in BUF at point POS."
+  (interactive (list (current-buffer) (point)))
+  (unless (lister-item-p buf pos)
+    (user-error "No item to visit"))
+  (let ((data (lister-get-data buf pos)))
+    (pcase data
+      ((pred firefox-history-item-p) (firefox-history-yank-evil (concat "[[" (firefox-history-item-url data) "][" (firefox-history-item-title data) "]]")))
+      (_                     (error "Cannot visit this item")))))
+
 (defun firefox-history-item-visit (buf pos)
   "Visit dates of item in BUF at point POS."
   (interactive (list (current-buffer) (point)))
@@ -173,7 +184,7 @@ See `firefox-history-pp-line' for possible values.")
     (user-error "No item to visit"))
   (let ((data (lister-get-data buf pos)))
     (pcase data
-      ((pred firefox-history-item-p) (firefox-history-visit-lister (firefox-history-item-url data)))
+      ((pred firefox-history-item-p) (firefox-history-check-if-visited-progressively (firefox-history-item-url data)))
       (_                     (error "Cannot visit this item")))))
 
 (defun firefox-history-expand-toggle-sublist ()
@@ -243,12 +254,8 @@ Queries for url title if `firefox-history-include-url-title'."
 
 (defun firefox-history-visit (url)
   "Get `firefox-history' ."
-    (firefox-history-elisp-title "--visit" url))
-
-(defun firefox-history-visit-lister (url)
-  "Get `firefox-history' ."
-  (-some--> (mapcar #'firefox-history-item (firefox-history-visit url))
-    (firefox-history-new-buffer it "Visited dates")))
+  (mapcar #'firefox-history-item
+    (firefox-history-elisp-title "--visit" url)))
 
 (defun firefox-history-chrono (visit-date)
   "Get `firefox-history' ."
@@ -271,14 +278,6 @@ Queries for url title if `firefox-history-include-url-title'."
   "Get `firefox-history' ."
   (when-let ((backtr (firefox-history-backtrace visit-date)))
       (firefox-history-new-buffer backtr "Backtrace")))
-
-(defun firefox-history-check-if-visited (url)
-  "Check if URL has been visited in the past by querying firefox database."
-  (mapcar (lambda (x) (let* ((item (firefox-history-item x))
-                             (timestamp (firefox-history-item-timestamp item))
-                             (title (firefox-history-item-title item)))
-                        (cons (concat timestamp " " title) item)))
-          (firefox-history-visit url)))
 
 (defun firefox-history-lister-view (entry)
   "Convert ENTRY to lister viewable string."
@@ -363,15 +362,12 @@ The new buffer name will be created by using
   (let ((urls (let ((org-roam-url-max-depth firefox-history-url-max-depth)) (org-roam-url--progressive-urls url)))
         (visited-dates '()))
     (cl-dolist (progressive-url urls)
-      (setq visited-dates (append visited-dates (firefox-history-check-if-visited progressive-url)))
+      (setq visited-dates (append visited-dates (firefox-history-visit progressive-url)))
       (when (and visited-dates firefox-history-stop-on-first-result)
         (cl-return visited-dates)))
     (when visited-dates
       (if fn (funcall fn))
-      (--> (helm :sources (helm-build-sync-source "firefox history"
-                            :candidates (reverse visited-dates) :filtered-candidate-transformer))
-           (firefox-history-item-time it)
-           (firefox-history-chrono it)))))
+     (firefox-history-new-buffer visited-dates "Visited dates"))))
 
 (defun firefox-history--org-protocol (info)
   "Process an org-protocol://firefox-history?ref= style url with INFO.
