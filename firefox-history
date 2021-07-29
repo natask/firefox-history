@@ -51,20 +51,7 @@ from datetime import datetime
 from docopt import docopt
 
 ## title from url
-import urllib.request as urllib
-from lxml.html import document_fromstring
 from multiprocessing import Pool
-
-def getUrlTitle(url):
-    page = urllib.urlopen(url, timeout=TIMEOUT).read().decode('utf-8')
-    p = document_fromstring(page)
-    return p.find(".//title").text
-
-def process_data(url):
- try:
-  return getUrlTitle(url)
- except:
-  return url;
 
 def process_data_subprocess(url):
  try:
@@ -80,10 +67,22 @@ def get_titles_subprocess(urls):
  with Pool(pool_len) as p:
   return p.map(process_data_subprocess, urls)
 
-def get_titles_python(urls):
- pool_len = len(urls)
- with Pool(pool_len) as p:
-  return p.map(process_data, urls)
+# import urllib.request as urllib
+# from lxml.html import document_fromstring
+# def getUrlTitle(url):
+#  page = urllib.urlopen(url, timeout=TIMEOUT).read().decode('utf-8')
+#  p = document_fromstring(page)
+#  return p.find(".//title").text
+
+# def process_data(url):
+#  try:
+#   return getUrlTitle(url)
+#  except:
+#   return url;
+# def get_titles_python(urls):
+#  pool_len = len(urls)
+#  with Pool(pool_len) as p:
+#   return p.map(process_data, urls)
 
 # import urlTitle
 # def get_titles_cpp(urls):

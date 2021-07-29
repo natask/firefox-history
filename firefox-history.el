@@ -30,18 +30,22 @@
   "Location of `firefox-history' script."
   :type '(string)
   :group 'firefox-history)
+
 (defcustom firefox-database-location   "~/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite"
   "Location of the firefox database."
   :type '(string)
   :group 'firefox-history)
+
 (defcustom firefox-database-temp-extension   "bak"
   "Extension for temporary firefox database."
   :type '(string)
   :group 'firefox-history)
+
 (defcustom firefox-history-depth   10
   "Depth of history query."
   :type '(integer)
   :group 'firefox-history)
+
 (defcustom firefox-history-url-max-depth   3
   "The max depth of url examined by `org-roam-url'."
   :type '(integer)
@@ -55,6 +59,11 @@
 (defcustom firefox-history-include-url-title 'nil
   "Show the title of url. Expensive to include url titles. Necessary to make https call."
   :type '(boolean)
+  :group 'firefox-history)
+
+(defcustom firefox-history-url-title-plist-length 100
+  "Max length of mapping url to title."
+  :type '(integer)
   :group 'firefox-history)
 
 (defvar firefox-history-url-title-plist 'nil
@@ -122,8 +131,25 @@ See `firefox-history-pp-line' for possible values.")
   (interactive (list (current-buffer)))
   (lister-reorder-this-level buf (point) 'reverse))
 
-;; Act on the item at point
+;; cache functions
+(defun firefox-history-get-cache (url)
+  "Get URL title from cache."
+  (lax-plist-get firefox-history-url-title-plist url))
 
+(defun firefox-history-insert-cache (url title)
+  "Insert URL TITLE into cache."
+  (setq firefox-history-url-title-plist (lax-plist-put firefox-history-url-title-plist url title))
+  (firefox-history-normalize-cache))
+
+(defun firefox-history-normalize-cache ()
+  "Makes sure that `firefox-history-url-title-plist' meets `firefox-history-url-title-plist-length' requirements.
+LRU replacement policy."
+  (let* ((cache-length (length firefox-history-url-title-plist))
+         (remove-items (- cache-length firefox-history-url-title-plist-length firefox-history-url-title-plist-length))) ;plist has double the length
+    (when (> remove-items 0)
+      (setq firefox-history-url-title-plist (nthcdr remove-items firefox-history-url-title-plist)))))
+
+;; Act on the item at point
 (defun firefox-history-item-chrono (buf pos)
   "Visualize chronology of item in BUF at point POS."
   (interactive (list (current-buffer) (point)))
@@ -133,6 +159,7 @@ See `firefox-history-pp-line' for possible values.")
     (pcase data
       ((pred firefox-history-item-p) (firefox-history-chrono (firefox-history-item-time data)))
       (_                     (error "Cannot visit this item")))))
+
 
 (defun firefox-history-item-backtrace (buf pos)
   "Visualize acktrace of item in BUF at point POS."
@@ -197,11 +224,17 @@ See `firefox-history-pp-line' for possible values.")
       (_                     (error "Cannot visit this item")))))
 
 (defun firefox-history-get-url-title (url)
-  "Get title for URL through wget and sed shell call."
+  "Get title for URL through `xidel' shell call or from cache."
   (let ((shell-string (concat "xidel "
                               "\"" url "\""
                               " -s --extract //title --error-handling=500| head -1")))
-    (string-trim (shell-command-to-string shell-string))))
+    (if-let ((url-title (firefox-history-get-cache url)))
+        url-title
+      (-->  (shell-command-to-string shell-string)
+            (string-trim it)
+            (let ((url-title it))
+              (firefox-history-insert-cache url url-title)
+              url-title)))))
 
 (defun firefox-history-item-visit (buf pos)
   "Visit dates of item in BUF at point POS."
@@ -217,9 +250,9 @@ See `firefox-history-pp-line' for possible values.")
   "Close or open the item's sublist at point."
   (interactive)
   (let* ((buf (current-buffer))
-	 (pos (point)))
+         (pos (point)))
     (if (lister-sublist-below-p buf pos)
-	(lister-remove-sublist-below buf pos)
+        (lister-remove-sublist-below buf pos)
       (firefox-history-expand-and-insert buf pos))))
 
 (defun firefox-history-expand-and-insert (buf pos)
@@ -231,14 +264,14 @@ BUF must be a valid lister buffer populated with delve items. POS
 can be an integer or the symbol `:point'."
   (interactive (list (current-buffer) (point)))
   (let* ((position (pcase pos
-		     ((and (pred integerp) pos) pos)
-		     (:point (with-current-buffer buf (point)))
-		     (_ (error "Invalid value for POS: %s" pos))))
-	 (item     (lister-get-data buf position))
-	 (sublist  (firefox-history-backtrace (firefox-history-item-time item))))
+                     ((and (pred integerp) pos) pos)
+                     (:point (with-current-buffer buf (point)))
+                     (_ (error "Invalid value for POS: %s" pos))))
+         (item     (lister-get-data buf position))
+         (sublist  (firefox-history-backtrace (firefox-history-item-time item))))
     (if sublist
-	(with-temp-message "Inserting expansion results..."
-	  (lister-insert-sublist-below buf position sublist))
+        (with-temp-message "Inserting expansion results..."
+          (lister-insert-sublist-below buf position sublist))
       (user-error "No expansion found"))))
 
 ;;; Code:
@@ -246,16 +279,16 @@ can be an integer or the symbol `:point'."
   "Call `firefox-history' with arguments ARGS."
   (let ((args (-reduce-from (lambda (x y) (concat x " " "\"" y "\"")) "" args)))
     (--> (shell-command-to-string (concat firefox-history-location " " args))
-     (split-string it "\n" 't)
-     (mapcar #'read it)
-     (if (length> it 1)
-       (progn
-        ;; NOTE: check if the list is in fact a url-title plist.
-       (setq firefox-history-url-title-plist (car (last it)))
-       it)
-     (setq firefox-history-url-title-plist 'nil)
-     it)
-     (car it))))
+         (split-string it "\n" 't)
+         (mapcar #'read it)
+         (if (length> it 1)
+             (progn
+               ;; NOTE: check if the list is in fact a url-title plist.
+               (setq firefox-history-url-title-plist (car (last it)))
+               it)
+           (setq firefox-history-url-title-plist 'nil)
+           it)
+         (car it))))
 
 (defun firefox-history-elisp-title (&rest args)
   "Call `firefox-history' with arguments ARGS.
@@ -281,16 +314,16 @@ Queries for url title if `firefox-history-include-url-title'."
 (defun firefox-history-visit (url)
   "Get `firefox-history' visit dates of URL."
   (mapcar #'firefox-history-item
-    (firefox-history-elisp-title "--visit" url)))
+          (firefox-history-elisp-title "--visit" url)))
 
 (defun firefox-history-chrono (visit-date)
   "Get `firefox-history' chronology of website visited on VISIT-DATE."
   (let ((visit-date (cond
-                      ((stringp visit-date) visit-date)
-                      ((numberp visit-date) (number-to-string visit-date)))))
-  (-some--> (firefox-history-elisp-title "--chrono" "--time" visit-date)
-  (firefox-history-parse-chronology it)
-  (firefox-history-new-buffer it "Chronology"))))
+                     ((stringp visit-date) visit-date)
+                     ((numberp visit-date) (number-to-string visit-date)))))
+    (-some--> (firefox-history-elisp-title "--chrono" "--time" visit-date)
+      (firefox-history-parse-chronology it)
+      (firefox-history-new-buffer it "Chronology"))))
 
 (defun firefox-history-backtrace (visit-date)
   "Get `firefox-history' backtrace of website visited on VISIT-DATE."
@@ -303,16 +336,16 @@ Queries for url title if `firefox-history-include-url-title'."
 (defun firefox-history-backtrace-new-buffer (visit-date)
   "Get `firefox-history' ."
   (when-let ((backtr (firefox-history-backtrace visit-date)))
-      (firefox-history-new-buffer backtr "Backtrace")))
+    (firefox-history-new-buffer backtr "Backtrace")))
 
 (defun firefox-history-lister-view (entry)
   "Convert ENTRY to lister viewable string."
   (let* ((time (number-to-string (firefox-history-item-time entry)))
-                                 (url (firefox-history-item-url entry))
-                                 (timestamp (firefox-history-item-timestamp entry))
-                                 (title (firefox-history-item-title entry))
-                                 (head (firefox-history-item-head entry)))
-                                (concat  (propertize timestamp 'face 'org-clock-overlay) " " (propertize title 'face (if head 'doom-dashboard-menu-title 'org-document-title)))))
+         (url (firefox-history-item-url entry))
+         (timestamp (firefox-history-item-timestamp entry))
+         (title (firefox-history-item-title entry))
+         (head (firefox-history-item-head entry)))
+    (concat  (propertize timestamp 'face 'org-clock-overlay) " " (propertize title 'face (if head 'doom-dashboard-menu-title 'org-document-title)))))
 
 (defun firefox-history-item (item &optional head)
   "Create firefox history item from ITEM.
@@ -393,7 +426,7 @@ The new buffer name will be created by using
         (cl-return visited-dates)))
     (when visited-dates
       (if fn (funcall fn))
-     (firefox-history-new-buffer visited-dates "Visited dates"))))
+      (firefox-history-new-buffer visited-dates "Visited dates"))))
 
 (defun firefox-history--org-protocol (info)
   "Process an org-protocol://firefox-history?ref= style url with INFO.

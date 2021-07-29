@@ -1,7 +1,13 @@
+:PROPERTIES:
+:ID:       0e398ccc-ab4a-48d1-83f0-08643e68cea1
+:END:
 #+TITLE: Firefox History
 This is a tool to explore url history that is located within firefox database. It is Emacs integrated. One can check if url has been visited and when directly from firefox by executing a command through org-protocol.
 
 * setup
+:PROPERTIES:
+:ID:       1796de71-00cc-41eb-9d47-5c5a4441e157
+:END:
 - Install package (doom) ::
 #+begin_src emacs-lisp
 (package! firefox-history
@@ -40,3 +46,16 @@ mapkey('cf', 'org protocol capture ref', function() {
     protocolCall("firefox-history");
 });
 #+end_src
+* dependencies
+:PROPERTIES:
+:ID:       3f6ae7e9-6927-489c-a8be-284efc475e57
+:END:
+- =xidel=, library to retrieve url title.
+- python file =firefox-history= that is distributed alongside
+#+begin_quote
+import sqlite3
+import subprocess
+import shlex
+from datetime import datetime
+from docopt import docopt
+#+end_quote
