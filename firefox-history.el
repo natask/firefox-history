@@ -81,6 +81,7 @@
   (kbd "yy") #'firefox-history-item-yank-url
   (kbd "yu") #'firefox-history-item-yank-url
   (kbd "yo") #'firefox-history-item-yank-url-org
+  (kbd "yd") #'firefox-history-item-yank-url-title
   (kbd "r") #'firefox-history-reverse-buffer
   (kbd "i") #'firefox-history-reverse-buffer)
 
@@ -124,7 +125,7 @@ See `firefox-history-pp-line' for possible values.")
 ;; Act on the item at point
 
 (defun firefox-history-item-chrono (buf pos)
-  "Chronology of item in BUF at point POS."
+  "Visualize chronology of item in BUF at point POS."
   (interactive (list (current-buffer) (point)))
   (unless (lister-item-p buf pos)
     (user-error "No item to visit"))
@@ -134,7 +135,7 @@ See `firefox-history-pp-line' for possible values.")
       (_                     (error "Cannot visit this item")))))
 
 (defun firefox-history-item-backtrace (buf pos)
-  "backtrace of item in BUF at point POS."
+  "Visualize acktrace of item in BUF at point POS."
   (interactive (list (current-buffer) (point)))
   (unless (lister-item-p buf pos)
     (user-error "No item to visit"))
@@ -144,11 +145,12 @@ See `firefox-history-pp-line' for possible values.")
       (_                     (error "Cannot visit this item")))))
 
 (defun firefox-history-yank-evil (item)
+  "Yank ITEM using evil. Message yanked string."
   (evil-set-register ?* item)
   (message "%s" item))
 
 (defun firefox-history-item-yank-time (buf pos)
-  "time of item in BUF at point POS."
+  "Yank time of item in BUF at point POS."
   (interactive (list (current-buffer) (point)))
   (unless (lister-item-p buf pos)
     (user-error "No item to visit"))
@@ -158,7 +160,7 @@ See `firefox-history-pp-line' for possible values.")
       (_                     (error "Cannot visit this item")))))
 
 (defun firefox-history-item-yank-url (buf pos)
-  "url of item in BUF at point POS."
+  "Yank url of item in BUF at point POS."
   (interactive (list (current-buffer) (point)))
   (unless (lister-item-p buf pos)
     (user-error "No item to visit"))
@@ -168,14 +170,38 @@ See `firefox-history-pp-line' for possible values.")
       (_                     (error "Cannot visit this item")))))
 
 (defun firefox-history-item-yank-url-org (buf pos)
-  "url of item in org format in BUF at point POS."
+  "Yank url of item in org format in BUF at point POS."
   (interactive (list (current-buffer) (point)))
   (unless (lister-item-p buf pos)
     (user-error "No item to visit"))
   (let ((data (lister-get-data buf pos)))
     (pcase data
-      ((pred firefox-history-item-p) (firefox-history-yank-evil (concat "[[" (firefox-history-item-url data) "][" (firefox-history-item-title data) "]]")))
+      ((pred firefox-history-item-p) (firefox-history-yank-evil (concat "[[" (firefox-history-item-url data) "][" (firefox-history-query-url-title data) "]]")))
       (_                     (error "Cannot visit this item")))))
+
+(defun firefox-history-query-url-title (data)
+  "Get url title of DATA. Query web if necessary."
+  (if (string= (firefox-history-item-title data)
+               (firefox-history-item-url data))
+      (firefox-history-get-url-title (firefox-history-item-url data))
+    (firefox-history-item-title data)))
+
+(defun firefox-history-item-yank-url-title (buf pos)
+  "Yank url title of item in org format in BUF at point POS."
+  (interactive (list (current-buffer) (point)))
+  (unless (lister-item-p buf pos)
+    (user-error "No item to visit"))
+  (let ((data (lister-get-data buf pos)))
+    (pcase data
+      ((pred firefox-history-item-p) (firefox-history-yank-evil (firefox-history-query-url-title data)))
+      (_                     (error "Cannot visit this item")))))
+
+(defun firefox-history-get-url-title (url)
+  "Get title for URL through wget and sed shell call."
+  (let ((shell-string (concat "xidel "
+                              "\"" url "\""
+                              " -s --extract //title --error-handling=500| head -1")))
+    (string-trim (shell-command-to-string shell-string))))
 
 (defun firefox-history-item-visit (buf pos)
   "Visit dates of item in BUF at point POS."
@@ -253,12 +279,12 @@ Queries for url title if `firefox-history-include-url-title'."
   (string-trim (shell-command-to-string (concat firefox-history-location " " "--version"))))
 
 (defun firefox-history-visit (url)
-  "Get `firefox-history' ."
+  "Get `firefox-history' visit dates of URL."
   (mapcar #'firefox-history-item
     (firefox-history-elisp-title "--visit" url)))
 
 (defun firefox-history-chrono (visit-date)
-  "Get `firefox-history' ."
+  "Get `firefox-history' chronology of website visited on VISIT-DATE."
   (let ((visit-date (cond
                       ((stringp visit-date) visit-date)
                       ((numberp visit-date) (number-to-string visit-date)))))
@@ -267,7 +293,7 @@ Queries for url title if `firefox-history-include-url-title'."
   (firefox-history-new-buffer it "Chronology"))))
 
 (defun firefox-history-backtrace (visit-date)
-  "Get `firefox-history' ."
+  "Get `firefox-history' backtrace of website visited on VISIT-DATE."
   (let ((visit-date (cond
                      ((stringp visit-date) visit-date)
                      ((numberp visit-date) (number-to-string visit-date)))))
