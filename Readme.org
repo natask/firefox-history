@@ -50,8 +50,7 @@ mapkey('cf', 'org protocol capture ref', function() {
 :PROPERTIES:
 :ID:       3f6ae7e9-6927-489c-a8be-284efc475e57
 :END:
-- =xidel=, library to retrieve url title.
-- python file =firefox-history= that is distributed alongside
+- python file =firefox-history= that is distributed alongside. Wasn't written in elisp because emacsql throws error when parsing unquoted urls that contain #.
 #+begin_quote
 import sqlite3
 import subprocess
