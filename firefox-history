@@ -63,7 +63,7 @@ important:
 make sure the first cell of entry is visit_date. Code below makes that assumption.
 '''
 def getEntry(cur, string):
- return getQueryResults(cur, "select visit_date, url, title, description, visit_count,last_visit_date,frecency from mine " + string);
+ return list(map(lambda entry : list(map(ensureMatchedQuotes, entry)), getQueryResults(cur, "select visit_date, url, title, description, visit_count,last_visit_date,frecency from mine " + string)));
 
 '''
 Get entry for urls that are like URL.
@@ -71,6 +71,24 @@ Get entry for urls that are like URL.
 def getVisitInfo(cur, url):
  ret =  getEntry(cur, f"where url like {url}");
  return ret;
+
+'''
+Ensure that if ITEM is a string, all quotes are matched.
+'''
+def ensureMatchedQuotes(item):
+  if(type(item) == type("")):
+   string = item;
+   postfix = "";
+   no_of_double_quotes = string.count("\"");
+   if no_of_double_quotes % 2 == 1:
+    postfix += "\"";
+   no_of_single_quotes = string.count("'");
+   if no_of_single_quotes % 2 == 1:
+    postfix += "'";
+   return string + postfix;
+  else:
+   return item;
+
 
 '''
 Get entry for date that is TIME.

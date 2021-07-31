@@ -233,27 +233,11 @@ can be an integer or the symbol `:point'."
 
 ;;; Code:
 (defun firefox-history (&rest args)
-  "Call `firefox-history' with arguments ARGS."
-  (let ((args (-reduce-from (lambda (x y) (concat x " " "\"" y "\"")) "" args)))
-    (--> (shell-command-to-string (concat firefox-history-location " " args))
-         (split-string it "\n" 't)
-         (mapcar #'read it)
-         (if (length> it 1)
-             (progn
-               ;; NOTE: check if the list is in fact a url-title plist.
-               (setq firefox-history-url-title-plist (car (last it)))
-               it)
-           (setq firefox-history-url-title-plist 'nil)
-           it)
-         (car it))))
-
-(defun firefox-history-elisp-title (&rest args)
   "Call `firefox-history' with arguments ARGS.
-Queries for an elisp compatable result.
-Queries for url title if `firefox-history-include-url-title'."
+Adds flag `--elisp' to command `firfox-history' to return elisp consumable output."
   (let ((args (-reduce-from (lambda (x y) (concat x " " "\"" y "\"")) "" args)))
     (-->  (concat firefox-history-location " " "--elisp" " " args)
-    (shell-command-to-string it)
+          (shell-command-to-string it)
     (read it))))
 
 (defun firefox-history-version ()
@@ -263,14 +247,14 @@ Queries for url title if `firefox-history-include-url-title'."
 (defun firefox-history-visit (url)
   "Get `firefox-history' visit dates of URL."
   (mapcar #'firefox-history-item
-          (firefox-history-elisp-title "--visit" "--url" url)))
+          (firefox-history "--visit" "--url" url)))
 
 (defun firefox-history-chrono (visit-date)
   "Get `firefox-history' chronology of website visited on VISIT-DATE."
   (let ((visit-date (cond
                      ((stringp visit-date) visit-date)
                      ((numberp visit-date) (number-to-string visit-date)))))
-    (-some--> (firefox-history-elisp-title "--chrono" "--time" visit-date)
+    (-some--> (firefox-history "--chrono" "--time" visit-date)
       (firefox-history-parse-chronology it)
       (firefox-history-new-buffer it "Chronology"))))
 
@@ -279,7 +263,7 @@ Queries for url title if `firefox-history-include-url-title'."
   (let ((visit-date (cond
                      ((stringp visit-date) visit-date)
                      ((numberp visit-date) (number-to-string visit-date)))))
-    (-some--> (firefox-history-elisp-title "--backtrace" "--time" visit-date)
+    (-some--> (firefox-history "--backtrace" "--time" visit-date)
       (firefox-history-parse-backtrace it))))
 
 (defun firefox-history-backtrace-new-buffer (visit-date)
