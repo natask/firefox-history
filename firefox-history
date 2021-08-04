@@ -235,14 +235,14 @@ def main():
  except:
   pass
 
- if time==0:
+ if time==0 and not queryp:
   visit_info = getVisitInfo(cur,url);
  else:
   visit_info = getVisitInfoTime(cur,time);
 
  chrono = chronop and getChrono(cur, visit_info);
  backtrace = backtracep and getBacktrace(cur,visit_info);
- queryResults = queryp and getQueryResults(cur,query);
+ queryResults = queryp and getEntry(cur,query);
 
  if not elisp:
   queryp and print(queryResults);

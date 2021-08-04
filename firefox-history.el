@@ -292,9 +292,7 @@ If not return empty string."
 HEAD signifies the search target."
   (let* ((time (nth 0 item))
          (url (nth 1 item))
-         (timestamp (->> time
-                         firefox-history-unix-time-to-seconds
-                         firefox-history-unix-time-to-timestamp))
+         (timestamp (firefox-history-firefox-unixtime-to-timestamp time))
          (title (firefox-history-string-or-empty (nth 2 item)))
          (description (firefox-history-string-or-empty (nth 3 item)))
          (visit_count (nth 4 item))
@@ -351,13 +349,10 @@ The new buffer name will be created by using
     (switch-to-buffer buf)
     buf))
 
-(defun firefox-history-unix-time-to-seconds (time)
-  "Convert firefox unixtime in microseconds to unix time in seconds."
+(defun firefox-history-firefox-unixtime-to-timestamp (time)
+  "Convert firefox unixtime in microseconds to timestamp in unix time in seconds."
   (--> time
-       (/ it 1000000)))
-
-(defun firefox-history-unix-time-to-timestamp (time)
-  (--> time
+       (/ it 1000000)
        (seconds-to-time it)
        (format-time-string "[%Y-%m-%d %a %H:%M:%S]" it)))
 
