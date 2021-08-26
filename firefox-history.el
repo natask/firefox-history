@@ -9,7 +9,7 @@
 ;; Version: 0.0.1
 ;; Keywords: Symbol’s value as variable is void: finder-known-keywords
 ;; Homepage: https://github.com/savnkk/firefox-history
-;; Package-Requires: ((emacs "24.3"))
+;; Package-Requires: ((emacs "24.4"))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
@@ -238,7 +238,7 @@ Adds flag `--elisp' to command `firfox-history' to return elisp consumable outpu
   (let ((args (-reduce-from (lambda (x y) (concat x " " "\"" y "\"")) "" args)))
     (-->  (concat firefox-history-location " " "--elisp" " " args)
           (shell-command-to-string it)
-    (read it))))
+          (read it))))
 
 (defun firefox-history-version ()
   "Get `firefox-history' version."
@@ -284,8 +284,8 @@ Adds flag `--elisp' to command `firfox-history' to return elisp consumable outpu
   "Return ITEM if ITEM is a string.
 If not return empty string."
   (pcase item
-   ((pred (not (stringp))) "")
-  (_ item)))
+    ((pred (not (stringp))) "")
+    (_ item)))
 
 (defun firefox-history-item (item &optional head)
   "Create firefox history item from ITEM.
@@ -359,6 +359,8 @@ The new buffer name will be created by using
 (defun firefox-history-check-if-visited-progressively (url &optional fn)
   "Check if URL has been visited in the past by querying firefox database progressively.
    Call FN if URL has been found."
+  (interactive
+   (list (completing-read "url" 'nil)))
   (let ((urls (let ((org-roam-url-max-depth firefox-history-url-max-depth)) (org-roam-url--progressive-urls url)))
         (visited-dates '()))
     (cl-dolist (progressive-url urls)
