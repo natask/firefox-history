@@ -176,8 +176,18 @@ look at `firefox-history-search--query-string-to-sexp' and `firefox-history-sear
   (--> (mapcar #'firefox-history-item
                (firefox-history "--stable" "--query" str))
        (mapcar (lambda (x) (cons (firefox-history-lister-view x) x)) it)
-       (consult--read it)))
-                                        ;(firefox-history-new-buffer it "Search results")))
+       (consult--read it
+       :lookup #'consult--lookup-cdr
+       ;; :add-history
+       ;; (when-let (thing (thing-at-point 'symbol))
+       ;; (consult--async-split-initial thing))
+       :require-match t
+       :category 'firefox-history-search
+       ;; :category 'consult-grep
+       ;; :group #'consult--grep-group
+       ;; :history '(:input consult--grep-history)
+       :sort nil)
+       (firefox-history-new-buffer (list it) "Search results")))
 
 (defun firefox-history-search-consult--command-args (cmd)
   "Split command arguments and append to CMD."
@@ -222,9 +232,9 @@ INITIAL is initial input."
     (--> (consult--read
           (firefox-history-search-consult--async-command (concat firefox-history-location " " "--elisp" " " "--stable" " " "--query" " " "ARG")
             (firefox-history-search-consult--async-transform (lambda (lines)
-                                                               (->> (read lines)
+                                                               (--> (read (apply 'concat lines))
                                                                     (mapcar (lambda (entry) (let ((item (firefox-history-item entry)))
-                                                                                              (cons (firefox-history-lister-view item) item))))))))
+                                                                                              (cons (firefox-history-lister-view item) item))) it)))))
           :prompt prompt
           :initial (consult--async-split-initial initial)
           :lookup #'consult--lookup-cdr
@@ -232,7 +242,7 @@ INITIAL is initial input."
           ;; (when-let (thing (thing-at-point 'symbol))
           ;; (consult--async-split-initial thing))
           :require-match t
-          :category 'firefox-history-search-consult
+          :category 'firefox-history-search
           ;; :category 'consult-grep
           ;; :group #'consult--grep-group
           ;; :history '(:input consult--grep-history)
