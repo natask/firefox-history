@@ -7,9 +7,9 @@
 ;; Created: August 25, 2021
 ;; Modified: August 25, 2021
 ;; Version: 0.0.1
-;; Keywords: abbrev bib c calendar comm convenience data docs emulations extensions faces files frames games hardware help hypermedia i18n internal languages lisp local maint mail matching mouse multimedia news outlines processes terminals tex tools unix vc wp
+;; Keywords: broswer, matching
 ;; Homepage: https://github.com/savnkk/firefox-history-search
-;; Package-Requires: ((emacs "24.4") (seq))
+;; Package-Requires: ((emacs "26.1"))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;

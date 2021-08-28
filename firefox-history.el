@@ -1,4 +1,4 @@
-;;; firefox-history.el --- Utility to delve into firefox database. -*- lexical-binding: t; -*-
+;;; firefox-history.el --- Utility to delve into firefox database -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2021 Natnael Kahssay
 ;;
@@ -7,22 +7,22 @@
 ;; Created: July 05, 2021
 ;; Modified: July 05, 2021
 ;; Version: 0.0.1
-;; Keywords: Symbol’s value as variable is void: finder-known-keywords
+;; Keywords: browser, matching
 ;; Homepage: https://github.com/savnkk/firefox-history
-;; Package-Requires: ((emacs "24.4"))
+;; Package-Requires: ((emacs "26.1"))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
 ;;; Commentary:
 ;;
+;;  Utility to delve into firefox database
 ;;
-;;
+(require 'evil)
 (require 'helm)
 (require 'dash)
 (require 'org-protocol)
 (require 'org-roam-url)
 (require 'delve)
-(require 'cl)
 (require 'cl-lib)
 
 ;;; vars:
@@ -31,12 +31,12 @@
   :type '(string)
   :group 'firefox-history)
 
-(defcustom firefox-database-location   "~/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite"
+(defcustom firefox-history-database-location   "~/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite"
   "Location of the firefox database."
   :type '(string)
   :group 'firefox-history)
 
-(defcustom firefox-database-temp-extension   "bak"
+(defcustom firefox-history-database-temp-extension   "bak"
   "Extension for temporary firefox database."
   :type '(string)
   :group 'firefox-history)
@@ -60,12 +60,7 @@
 
 (defvar firefox-history-mode-map
   (let ((map (make-sparse-keymap)))
-    ;; inherit standard key bindings:
-    ;; FIXME Remove reference to deprecated lister-keys-mode-map
-    ;; once we dependend on lister>0.7.1
-    (set-keymap-parent map (if (fboundp 'lister-keys-mode-map)
-                               lister-keys-mode-map
-                             lister-mode-map))
+    (set-keymap-parent map lister-mode-map)
     map))
 
 (evil-define-key* '(normal insert) firefox-history-mode-map
@@ -267,14 +262,13 @@ Adds flag `--elisp' to command `firfox-history' to return elisp consumable outpu
       (firefox-history-parse-backtrace it))))
 
 (defun firefox-history-backtrace-new-buffer (visit-date)
-  "Get `firefox-history' ."
+  "Get `firefox-history' at VISIT-DATE ."
   (when-let ((backtr (firefox-history-backtrace visit-date)))
     (firefox-history-new-buffer backtr "Backtrace")))
 
 (defun firefox-history-lister-view (entry)
   "Convert ENTRY to lister viewable string."
-  (let* ((time (number-to-string (firefox-history-item-time entry)))
-         (url (firefox-history-item-url entry))
+  (let* ((url (firefox-history-item-url entry))
          (timestamp (firefox-history-item-timestamp entry))
          (title (firefox-history-item-title entry))
          (head (firefox-history-item-head entry)))
@@ -350,7 +344,7 @@ The new buffer name will be created by using
     buf))
 
 (defun firefox-history-firefox-unixtime-to-timestamp (time)
-  "Convert firefox unixtime in microseconds to timestamp in unix time in seconds."
+  "Convert firefox unixtime TIME in microseconds to timestamp in unix time in seconds."
   (--> time
        (/ it 1000000)
        (seconds-to-time it)
@@ -358,7 +352,7 @@ The new buffer name will be created by using
 
 (defun firefox-history-check-if-visited-progressively (url &optional fn)
   "Check if URL has been visited in the past by querying firefox database progressively.
-   Call FN if URL has been found."
+Call FN if URL has been found."
   (interactive
    (list (completing-read "url" 'nil)))
   (let ((urls (let ((org-roam-url-max-depth firefox-history-url-max-depth)) (org-roam-url--progressive-urls url)))
