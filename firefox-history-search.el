@@ -194,7 +194,7 @@ look at `firefox-history-search--query-string-to-sexp' and `firefox-history-sear
   (setq cmd (split-string-and-unquote cmd))
   (lambda (input)
     (save-match-data
-      (setq  input (ignore-errors (firefox-history-search-interactive-query input)))
+      (setq  input (condition-case nil (firefox-history-search-interactive-query input) (error "")))
       (unless (string-blank-p input)
         (mapcan (lambda (x)
                   (list (replace-regexp-in-string "ARG" input x 'fixedcase 'literal)))
