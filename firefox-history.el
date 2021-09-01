@@ -227,7 +227,7 @@ can be an integer or the symbol `:point'."
       (user-error "No expansion found"))))
 
 ;;; Code:
-(defun firefox-history (&rest args)
+ (defun firefox-history (&rest args)
   "Call `firefox-history' with arguments ARGS.
 Adds flag `--elisp' to command `firfox-history' to return elisp consumable output."
   (let ((args (-reduce-from (lambda (x y) (concat x " " "\"" y "\"")) "" args)))
@@ -237,7 +237,7 @@ Adds flag `--elisp' to command `firfox-history' to return elisp consumable outpu
 
 (defun firefox-history-main-cmd-string ()
   "Main command string for `firefox-history'."
-  (concat firefox-history-location " " "--database" " " firefox-history-database-location " " "--postfix" " " firefox-history-database-temp-extension))
+  (concat (expand-file-name firefox-history-location) " " "--database" " " (expand-file-name firefox-history-database-location) " " "--postfix" " " firefox-history-database-temp-extension))
 
 (defun firefox-history-version ()
   "Get `firefox-history' version."
