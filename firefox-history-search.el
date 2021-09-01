@@ -174,7 +174,7 @@ look at `firefox-history-search--query-string-to-sexp' and `firefox-history-sear
   (interactive (list (->> (completing-read "query:#" 'nil)
                           (firefox-history-search-interactive-query))))
   (--> (mapcar #'firefox-history-item
-               (firefox-history "--stable" "--query" str))
+               (firefox-history "--query" str))
        (mapcar (lambda (x) (cons (firefox-history-lister-view x) x)) it)
        (consult--read it
        :lookup #'consult--lookup-cdr
@@ -229,8 +229,9 @@ INITIAL is initial input."
   (interactive)
   (let* (;(default-directory firefox-history-location)
          (read-process-output-max (max read-process-output-max (* 1024 1024))))
+    (firefox-history-sync-temp-database)
     (--> (consult--read
-          (firefox-history-search-consult--async-command (concat firefox-history-location " " "--elisp" " " "--stable" " " "--query" " " "ARG")
+          (firefox-history-search-consult--async-command (concat (firefox-history-main-cmd-string) " " "--elisp" " " "--stable" " " "--query" " " "ARG")
             (firefox-history-search-consult--async-transform (lambda (lines)
                                                                (--> (read (apply 'concat lines))
                                                                     (mapcar (lambda (entry) (let ((item (firefox-history-item entry)))

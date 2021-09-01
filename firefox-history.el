@@ -231,13 +231,21 @@ can be an integer or the symbol `:point'."
   "Call `firefox-history' with arguments ARGS.
 Adds flag `--elisp' to command `firfox-history' to return elisp consumable output."
   (let ((args (-reduce-from (lambda (x y) (concat x " " "\"" y "\"")) "" args)))
-    (-->  (concat firefox-history-location " " "--elisp" " " args)
+    (-->  (concat (firefox-history-main-cmd-string) " " "--elisp" " " args)
           (shell-command-to-string it)
           (read it))))
+
+(defun firefox-history-main-cmd-string ()
+  "Main command string for `firefox-history'."
+  (concat firefox-history-location " " "--database" " " firefox-history-database-location " " "--postfix" " " firefox-history-database-temp-extension))
 
 (defun firefox-history-version ()
   "Get `firefox-history' version."
   (string-trim (shell-command-to-string (concat firefox-history-location " " "--version"))))
+
+(defun firefox-history-sync-temp-database ()
+  "Sync `firefox-history' temp database to current database."
+  (string-trim (shell-command-to-string (firefox-history-main-cmd-string))))
 
 (defun firefox-history-visit (url)
   "Get `firefox-history' visit dates of URL."
