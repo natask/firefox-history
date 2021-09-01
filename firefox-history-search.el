@@ -19,6 +19,7 @@
 ;;
 
 (require 'firefox-history)
+(require 'sexp-string)
 
 ;;; vars:
 (defvar firefox-history-search-predicates
@@ -50,103 +51,13 @@
                    (concat "(" it ")")))))))
 
 (defvar firefox-history-search-default-predicate-boolean 'and)
+(defvar firefox-history-search-default-predicate 'regexp)
 ;;; Code:
 
-(defun firefox-history-search--def-query-string-to-sexp-fn (predicates)
-  "Define function `firefox-history-search--query-string-to-sexp' according to PREDICATES.
-Builds the PEG expression using PREDICATES (which should be the
-value of `firefox-history-search-predicates').
-Borrowed from `org-ql'."
-  (let* ((names (--map (symbol-name (plist-get (cdr it) :name))
-                       predicates))
-         (aliases (->> predicates
-                       (--map (plist-get (cdr it) :aliases))
-                       -non-nil
-                       -flatten
-                       (-map #'symbol-name)))
-         (predicate-names (->> (append names aliases)
-                               -uniq
-                               ;; Sort the keywords longest-first to work around what seems to be an
-                               ;; obscure bug in `peg': when one keyword is a substring of another,
-                               ;; and the shorter one is listed first, the shorter one fails to match.
-                               (-sort (-on #'> #'length))))
-         (pexs
-          `((query sum (opt eol))
-            (sum value  (* (or (and _ "and" _ value `(a b -- (list 'and a b)))
-                               (and _ "or" _ value `(a b -- (list 'or a b)))
-                               (and _ value `(a b -- (list firefox-history-search-default-predicate-boolean a b))))))
-            (value
-             (or term
-                 (and "(" (opt _) sum (opt _) ")" (opt _))))
-            (term (or (and negation (list positive-term)
-                           ;; This is a bit confusing, but it seems to work.  There's probably a better way.
-                           `(pred -- (list 'not (car pred))))
-                      positive-term))
-            (positive-term (or (and predicate-with-args `(pred args -- (cons (intern pred) args)))
-                               (and predicate-without-args `(pred -- (list (intern pred))))
-                               (and plain-string `(s -- (list 'regexp s)))))
-            (plain-string (or quoted-arg unquoted-arg))
-            (predicate-with-args (substring predicate) ":" args)
-            (predicate-without-args (substring predicate) ":")
-            (predicate (or ,@predicate-names))
-            (args (list (+ (and (or keyword-arg quoted-arg unquoted-arg) (opt separator)))))
-            (keyword-arg (and keyword "=" `(kw -- (intern (concat ":" kw)))))
-            (keyword (substring (+ (not (or brackets separator "=" "\"" (syntax-class whitespace))) (any))))
-            (quoted-arg "\"" (substring (+ (not (or separator "\"")) (any))) "\"")
-            (unquoted-arg (substring (+ (not (or brackets separator "\"" (syntax-class whitespace))) (any))))
-            (negation "!")
-            (separator "," )
-            (operator (or "and" "or"))
-            (brackets (or "(" ")"))
-            (_ (* [" \t"]))
-                                        ;(_ (+ (syntax-class whitespace)))
-            (eol (or  "\n" "\r\n" "\r"))))
-         (closure (lambda (input &optional boolean)
-                    "Return query parsed from plain query string INPUT.
-  Multiple predicate-names are combined with BOOLEAN (default: `and')."
-                    ;; HACK: Silence unused lexical variable warnings.
-                    (ignore predicates predicate-names names aliases)
-                    (unless (s-blank-str? input)
-                      (let* ((firefox-history-search-default-predicate-boolean (or boolean firefox-history-search-default-predicate-boolean))
-                             (parsed-sexp
-                              (with-temp-buffer
-                                (insert input)
-                                (goto-char (point-min))
-                                ;; Copied from `peg-parse'.  There is no function in `peg' that
-                                ;; returns a matcher function--every entry point is a macro,
-                                ;; which means that, since we define our PEG rules at runtime when
-                                ;; predicate-names are defined, we either have to use `eval', or we
-                                ;; have to borrow some code.  It ends up that we only have to
-                                ;; borrow this `with-peg-rules' call, which isn't too bad.
-                                (eval `(with-peg-rules ,pexs
-                                         (peg-run (peg ,(caar pexs)) #'peg-signal-failure))))))
-                        (pcase parsed-sexp
-                          (`(,_) (car parsed-sexp))
-                          (_ nil)))))))
-    (fset 'firefox-history-search--query-string-to-sexp closure)))
-
-(defun firefox-history-search--define-transform-query-fn (predicates)
-  "Define function `firefox-history-search--transform-query' for PREDICATES.
-PREDICATES should be the value of `firefox-history-search-predicates'.
-Borrowed from `org-ql'."
-  (let ((transformer-patterns (->> predicates
-                                   (--map (plist-get (cdr it) :transform))
-                                   (-flatten-n 1))))
-    (fset 'firefox-history-search--transform-query
-          (byte-compile
-           `(lambda (query)
-              "Return transformed form of QUERY expression.
-This function is defined by calling
-`firefox-history-search--define-transform-query-fn', which uses transformr forms
-defined in `firefox-history-search-predicates' by calling `firefox-history-search-defpred'."
-              (cl-labels ((rec (element)
-                               (pcase element
-                                 ,@transformer-patterns
-                                 (_ (error "element didn't match transformer:%S" element)))))
-                (rec query)))))))
-
-(firefox-history-search--define-transform-query-fn (reverse firefox-history-search-predicates))
-(firefox-history-search--def-query-string-to-sexp-fn (reverse firefox-history-search-predicates))
+(declare-function firefox-history-search--query-string-to-sexp "ext:firefox-history-search" (query) t)
+(declare-function firefox-history-search--transform-query "ext:firefox-history-search" (query) t)
+(fset 'firefox-history-search--query-string-to-sexp (sexp-string--define-query-string-to-sexp-fn "firefox-history-search"))
+(fset 'firefox-history-search--transform-query (sexp-string--define-transform-query-fn "firefox-history-search" :transform))
 
 (defun firefox-history-search-match (str)
   "Create where... type query for firefox history from STR.
