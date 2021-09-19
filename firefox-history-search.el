@@ -52,6 +52,7 @@
 
 (defvar firefox-history-search-default-predicate-boolean 'and)
 (defvar firefox-history-search-default-predicate 'regexp)
+(defvar firefox-history-current-search-results 'nil)
 ;;; Code:
 
 (declare-function firefox-history-search--query-string-to-sexp "ext:firefox-history-search" (query) t)
@@ -59,6 +60,13 @@
 (fset 'firefox-history-search--query-string-to-sexp (sexp-string--define-query-string-to-sexp-fn "firefox-history-search"))
 (fset 'firefox-history-search--transform-query (sexp-string--define-transform-query-fn "firefox-history-search" :transform))
 
+;;;; embark::
+(add-to-list 'embark-exporters-alist '(firefox-history . embark-export-firefox-history))
+(defun embark-export-firefox-history (_)
+  (if firefox-history-current-search-results
+      (firefox-history-new-buffer firefox-history-current-search-results "Search results")))
+
+;;;; search::
 (defun firefox-history-search-match (str)
   "Create where... type query for firefox history from STR.
 Expect STR to be clause that fits between `where' and `order' SQL constructs."
@@ -86,6 +94,7 @@ look at `firefox-history-search--query-string-to-sexp' and `firefox-history-sear
                           (firefox-history-search-interactive-query))))
   (--> (mapcar #'firefox-history-item
                (firefox-history "--query" str))
+       (setq firefox-history-current-search-results it)
        (mapcar (lambda (x) (cons (firefox-history-lister-view x) x)) it)
        (consult--read it
        :lookup #'consult--lookup-cdr
@@ -93,7 +102,7 @@ look at `firefox-history-search--query-string-to-sexp' and `firefox-history-sear
        ;; (when-let (thing (thing-at-point 'symbol))
        ;; (consult--async-split-initial thing))
        :require-match t
-       :category 'firefox-history-search
+       :category 'firefox-history
        ;; :category 'consult-grep
        ;; :group #'consult--grep-group
        ;; :history '(:input consult--grep-history)
@@ -145,8 +154,9 @@ INITIAL is initial input."
           (firefox-history-search-consult--async-command (concat (firefox-history-main-cmd-string) " " "--elisp" " " "--stable" " " "--query" " " "ARG")
             (firefox-history-search-consult--async-transform (lambda (lines)
                                                                (--> (read (apply 'concat lines))
-                                                                    (mapcar (lambda (entry) (let ((item (firefox-history-item entry)))
-                                                                                              (cons (firefox-history-lister-view item) item))) it)))))
+                                                                    (mapcar (lambda (entry) (firefox-history-item entry)) it)
+                                                                    (setq firefox-history-current-search-results it)
+                                                                    (mapcar (lambda (x) (cons (firefox-history-lister-view x) x)) it)))))
           :prompt prompt
           :initial (consult--async-split-initial initial)
           :lookup #'consult--lookup-cdr
@@ -154,7 +164,7 @@ INITIAL is initial input."
           ;; (when-let (thing (thing-at-point 'symbol))
           ;; (consult--async-split-initial thing))
           :require-match t
-          :category 'firefox-history-search
+          :category 'firefox-history
           ;; :category 'consult-grep
           ;; :group #'consult--grep-group
           ;; :history '(:input consult--grep-history)
