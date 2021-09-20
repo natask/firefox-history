@@ -39,16 +39,16 @@
          :transform
          ((`(url . ,rest)
            (--> rest
-                (mapcar (apply-partially #'format "url like '%%%%%s%%%%'") it)
+                (mapcar (apply-partially #'format "url like '%%%s%%'") it)
                 (cl-reduce (lambda (x y) (concat x " or " y)) it)
                 (concat "(" it ")")))))
     (regexp :name regexp  :docstring "Return non-nil if current heading has one or more of TAGS (a list of strings).\nTests both inherited and local tags." :args (&rest regexp)
             :transform
             ((`(regexp . ,rest)
               (--> rest
-                   (mapcar (lambda (x) (concat (format "title like '%%%% %s%%%%'" x)
+                   (mapcar (lambda (x) (concat (format "title like '%%%s%%'" x)
                                                " or "
-                                               (format "description like '%%%% %s%%%%'" x))) it)
+                                               (format "description like '%%%s%%'" x))) it)
                    (cl-reduce (lambda (x y) (concat x " or " y)) it)
                    (concat "(" it ")")))))))
 
