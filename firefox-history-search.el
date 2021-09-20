@@ -18,6 +18,8 @@
 ;;  Search through firefox history
 ;;
 
+(require 'consult)
+(require 'embark)
 (require 'firefox-history)
 (require 'sexp-string)
 
