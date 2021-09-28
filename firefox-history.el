@@ -22,7 +22,7 @@
 (require 'dash)
 (require 'org-protocol)
 (require 'org-roam-url)
-(require 'delve)
+(require 'lister)
 (require 'cl-lib)
 
 ;;; vars:
