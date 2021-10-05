@@ -41,7 +41,7 @@
   :type '(string)
   :group 'firefox-history)
 
-(defcustom firefox-history-depth   10
+(defcustom firefox-history-depth   500
   "Depth of history query."
   :type '(integer)
   :group 'firefox-history)
@@ -97,6 +97,7 @@
 ;;; * Root object, for displaying additional info
 
 (cl-defstruct (firefox-history-item (:constructor firefox-history-make-item))
+  visit_date
   time
   timestamp
   url
@@ -227,11 +228,11 @@ can be an integer or the symbol `:point'."
       (user-error "No expansion found"))))
 
 ;;; Code:
- (defun firefox-history (&rest args)
+(defun firefox-history (&rest args)
   "Call `firefox-history' with arguments ARGS.
 Adds flag `--elisp' to command `firfox-history' to return elisp consumable output."
   (let ((args (-reduce-from (lambda (x y) (concat x " " "\"" y "\"")) "" args)))
-    (-->  (concat (firefox-history-main-cmd-string) " " "--elisp" " " args)
+    (-->  (concat (firefox-history-main-cmd-string) " " "--elisp" " " "--depth" " " (prin1-to-string firefox-history-depth) " " args)
           (shell-command-to-string it)
           (read it))))
 
@@ -292,42 +293,31 @@ If not return empty string."
 (defun firefox-history-item (item &optional head)
   "Create firefox history item from ITEM.
 HEAD signifies the search target."
-  (let* ((time (nth 0 item))
-         (url (nth 1 item))
-         (timestamp (firefox-history-firefox-unixtime-to-timestamp time))
-         (title (firefox-history-string-or-empty (nth 2 item)))
-         (description (firefox-history-string-or-empty (nth 3 item)))
-         (visit_count (nth 4 item))
-         (last_visit_date (nth 5 item))
-         (frecency (nth 6 item)))
-    (firefox-history-make-item
-     :time time
-     :timestamp timestamp
-     :url url
-     :title title
-     :description description
-     :visit_count visit_count
-     :last_visit_date last_visit_date
-     :frecency frecency
-     :head head)))
+  (-as-> (mapcar (lambda (elem) (if (stringp elem)
+                                    (--> (url-unhex-string elem)
+                                         (decode-coding-string it 'utf-8 't))
+                                  elem)) item) item
+                                  (plist-put item :time (plist-get item :visit_date))
+                                  (plist-put item :timestamp (firefox-history-firefox-unixtime-to-timestamp (plist-get item :time)))
+                                  (plist-put item :head head)
+                                  (apply #'firefox-history-make-item item)))
+
 
 (defun  firefox-history-parse-chronology (chrono)
   "Receives a nested property list CHRONO of with `time' literal, under it `item', `left' and `right'.
 Parses CHRONO for `lister' consumption."
   (cl-loop for entry in chrono
-           collect (let*  ((chrono-of-item (-flatten-n 2 (cdr entry)))
-                           (main-url (list (firefox-history-item (lax-plist-get chrono-of-item "item") 't)))
-                           (left (mapcar #'firefox-history-item (lax-plist-get chrono-of-item "left")))
-                           (right (mapcar #'firefox-history-item (lax-plist-get chrono-of-item "right"))))
-                     (append left main-url right))))
+           collect (let*  ((main-url (list (firefox-history-item (plist-get entry :item) 't)))
+                     (left (mapcar #'firefox-history-item (plist-get entry :left)))
+                     (right (mapcar #'firefox-history-item (plist-get entry :right))))
+               (append left main-url right))))
 
 (defun  firefox-history-parse-backtrace (backtr)
   "Receives a nested property list BACKTR of with `time' literal, under it `item' and `backtrace'.
 Parses BACKTR for `lister' consumption."
   (cl-loop for entry in backtr
-           collect (let*  ((item (-flatten-n 2 (cdr entry)))
-                           (main-url (list (firefox-history-item (lax-plist-get item "item") 't)))
-                           (backtrace-of-item (mapcar #'firefox-history-item (lax-plist-get item "backtrace"))))
+           collect (let*  ((main-url (list (firefox-history-item (plist-get entry :item) 't)))
+                           (backtrace-of-item (mapcar #'firefox-history-item (plist-get entry :backtrace))))
                      (append main-url backtrace-of-item))))
 
 (defun firefox-history-new-buffer (items &optional heading buffer-name)

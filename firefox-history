@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 # coding= utf-8
 '''
-usage: firefox-history [-h] [--database Database] [--postfix Postfix] [--depth DEPTH] [--stable] [--elisp] [--visit] [--chrono] [--backtrace] [--query] [--time TIME] [--url URL] [URL]
+usage: firefox-history [-h] [--database Database] [--postfix Postfix] [--depth DEPTH] [--stable] [--elisp] [--format Format] [--visit] [--chrono] [--backtrace] [--query] [--time TIME] [--url URL] [URL]
 
 Firefox History v0.2
 
@@ -25,14 +25,15 @@ positional arguments:
                         [default: https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96]
 
 optional arguments:
-  -h, --help           show this help message and exit
+  -h, --help           Show this help message and exit
   --database Database  Location of database.
                         [default: /home/savnkk/.mozilla/firefox/ynulz4el.dev-edition-default/places.sqlite]
   --postfix Postfix    Postfix difference between main database and copy database to which sql will connect to.
                         [default: bak]
-  --depth DEPTH        depth of backtrace and chronology for `url. [default: 10]
-  --time TIME          search TIME instead of URL. [default: 0]
+  --depth DEPTH        Number of Results, Depth of backtrace and chronology for `url. [default: 10]
+  --time TIME          Search TIME instead of URL. [default: 0]
   --url URL            Url that is to be searched in database. [default: https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96]
+  --format Format      Elisp format type: alist, plist. [default: plist]
   --stable             Database is stable. It doesn't change therefore direct connection will be made to it. [default: False]
   --elisp              Output in elisp form. [default: False]
   --visit              Output visited dates for `url. [default: False]
@@ -46,6 +47,9 @@ example:
 import sqlite3
 import subprocess
 import shlex
+import functools
+import urllib.parse
+import re
 from datetime import datetime
 from docopt import docopt
 
@@ -63,7 +67,11 @@ important:
 make sure the first cell of entry is visit_date. Code below makes that assumption.
 '''
 def getEntry(cur, string):
- return list(map(lambda entry : list(map(ensureMatchedQuotes, entry)), getQueryResults(cur, "select visit_date, url, title, description, visit_count,last_visit_date,frecency from mine " + string)));
+ ret_map = {};
+ map_keys = ["visit_date", "url", "title", "description", "visit_count", "last_visit_date", "frecency"];
+ res = getQueryResults(cur, "select " + functools.reduce(lambda x,y : x + ", " + y, map_keys) + " from mine " + string);
+ ret_list_map = list(map(lambda entry : dict(zip(map_keys, map(ensureMatchedQuotes, entry))), res));
+ return ret_list_map;
 
 '''
 Get entry for urls that are like URL.
@@ -78,14 +86,21 @@ Ensure that if ITEM is a string, all quotes are matched.
 def ensureMatchedQuotes(item):
   if(type(item) == type("")):
    string = "".join(item.split("\n"));
+   #string = string.replace("\\", "\\\\");
+   #string = string.replace("\"", "\\\"");
    postfix = "";
-   no_of_double_quotes = string.count("\"");
+   no_of_double_quotes = string.count("\\\"");
    if no_of_double_quotes % 2 == 1:
-    postfix += "\"";
+    postfix += "\\\"";
    no_of_single_quotes = string.count("'");
    if no_of_single_quotes % 2 == 1:
     postfix += "'";
-   return string + postfix;
+   return urllib.parse.quote(string + postfix);
+   return (string + postfix);
+  elif(item == None):
+   return "";
+  elif(type(item) == type([])):
+   "".join(item);
   else:
    return item;
 
@@ -102,29 +117,29 @@ def getVisitInfoTime(cur, time):
 Get chronological info for VISIT_INFO.
 '''
 def getChrono(cur, visit_info):
- chrono = {};
+ chrono = [];
  for item in visit_info:
-  date = item[0]
-  chrono[date] = {"item": item, "left" : [ ], "right" : []}
-  chrono_date = chrono[date]
+  date = item["visit_date"]
+  chrono_date = {"item": item, "left" : [ ], "right" : []}
   chrono_date["right"] = getEntry(cur, f"where visit_date > {date} limit {DEPTH}")
   chrono_date["left"]  = getEntry(cur, f"where visit_date < {date} order by visit_date desc limit {DEPTH}")
   chrono_date["left"] = chrono_date["left"][::-1]
+  chrono.append(chrono_date)
  return chrono;
 
 '''
 Get backtrace info for VISIT_INFO.
 '''
 def getBacktrace(cur, visit_info):
- backtrace = {}
+ backtrace = []
  for item in visit_info:
-  date = item[0]
-  res = cur.execute(f"select hid from mine where visit_date = {date} limit 10")
+  date = item["visit_date"]
+  res = cur.execute(f"select hid from mine where visit_date = {date}")
   if res := cur.fetchone():
    hid = res[0]
 
-   backtrace[date] = {"item": item, "backtrace": []}
-   backtrace_date = backtrace[date]["backtrace"]
+   backtrace_item = {"item": item, "backtrace": []}
+   backtrace_date = backtrace_item["backtrace"]
    depth = 0;
    while hid != 0 or depth < DEPTH:
     depth = depth + 1;
@@ -138,6 +153,8 @@ def getBacktrace(cur, visit_info):
      res = getEntry(cur, f"where hid={hid}")
      backtrace_date += (res)
 
+   backtrace.append(backtrace_item)
+
  return backtrace;
 
 def print_chrono_normal(chrono):
@@ -147,13 +164,13 @@ def print_chrono_normal(chrono):
 
  for date in chrono.keys():
   for item in chrono[date]["left"]:
-   print(dateToString(item[0]), item)
+   print(dateToString(item["visit_date"]), item)
 
   print()
   print(dateToString(date), chrono[date]["item"])
   print()
   for item in chrono[date]["right"]:
-   print(dateToString(item[0]), item)
+   print(dateToString(item["visit_date"]), item)
 
   print()
   print()
@@ -181,7 +198,26 @@ def print_backtrace_normal(backtrace):
 def is_iterable(item):
  return hasattr(item, '__getitem__');
 
-def print_iter_elisp_helper(item):
+def print_iter_elisp_plist(item):
+ if not is_iterable(item):
+  print(item, end=" ")
+ elif type(item) == type(""):
+  print("\"" + item.strip() + "\"", end=" ")
+ elif type(item) == type({}):
+  print("(", end="");
+  for val in item:
+   print("".join([":", str(val)]), end=" ");
+   print_iter_elisp_plist(item[val]);
+
+  print(")", end="")
+ else: #type(item) == type([])
+  print("(", end="");
+  for val in item:
+   print_iter_elisp_plist(val);
+
+  print(")")
+
+def print_iter_elisp_alist(item):
  if not is_iterable(item):
   print(item, end=" ")
  elif type(item) == type(""):
@@ -190,38 +226,34 @@ def print_iter_elisp_helper(item):
   print("(", end="");
   for val in item:
    print("(", end="");
-   print_iter_elisp_helper(val);
-   print_iter_elisp_helper(item[val]);
+   print_iter_elisp_alist(val);
+   print_iter_elisp_alist(item[val]);
    print(")", end=" ");
 
   print(")", end="")
  else: #type(item) == type([])
   print("(", end="");
   for val in item:
-   print_iter_elisp_helper(val);
+   print_iter_elisp_alist(val);
 
-  print(")", end= "")
-
-
-def print_iter_elisp(item):
- print_iter_elisp_helper(item);
- print();
+  print(")")
 
 def main():
  global DEPTH
- args       = docopt(__doc__, version="Firefox History v0.2")
- query      = args["URL"] or args["--url"] or "https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96"
- url        = "'" + query + "'"
- database   = args["--database"]
- postfix    = args["--postfix"]
- DEPTH      = int(args["--depth"])
- stable     = args["--stable"]
- elisp      = args["--elisp"]
- backtracep = args["--backtrace"]
- queryp     = args["--query"]
- visitp     = args["--visit"]
- chronop    = args["--chrono"]
- time       = int(args["--time"])
+ args         = docopt(__doc__, version="Firefox History v0.2")
+ query        = args["URL"] or args["--url"] or "https://gist.github.com/olejorgenb/9418bef65c65cd1f489557cfc08dde96"
+ url          = "'" + query + "'"
+ database     = args["--database"]
+ postfix      = args["--postfix"]
+ DEPTH        = int(args["--depth"])
+ stable       = args["--stable"]
+ elisp        = args["--elisp"]
+ backtracep   = args["--backtrace"]
+ queryp       = args["--query"]
+ visitp       = args["--visit"]
+ chronop      = args["--chrono"]
+ print_format = args["--format"]
+ time         = int(args["--time"])
 
  if not stable:
   # NOTE: need to check there is no other process making calls to the copy database.
@@ -229,6 +261,8 @@ def main():
 
  database = database + '.' + postfix
  con = sqlite3.connect(database)
+ print_elisp = print_iter_elisp_alist if print_format == "alist" else print_iter_elisp_plist;
+
  cur = con.cursor()
  try:
   cur.execute(f"create view mine as select a.id, b.id hid, a.url, a.title, a.visit_count, a.frecency, a.last_visit_date, a.description, b.from_visit, b.visit_date from moz_places a inner join moz_historyvisits b on b.place_id = a.id order by b.visit_date")
@@ -250,10 +284,10 @@ def main():
   chronop and print_chrono_normal(chrono);
   backtracep and print_backtrace_normal(backtrace);
  else:
-  queryp and print_iter_elisp(queryResults);
-  visitp and print_iter_elisp(visit_info);
-  chronop and print_iter_elisp(chrono);
-  backtracep and print_iter_elisp(backtrace);
+  queryp and print_elisp(queryResults);
+  visitp and print_elisp(visit_info);
+  chronop and print_elisp(chrono);
+  backtracep and print_elisp(backtrace);
 
  cur.close()
 
