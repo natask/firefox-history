@@ -23,6 +23,7 @@
 (require 'org-protocol)
 (require 'org-roam-url)
 (require 'lister)
+(require 'lister-highlight)
 (require 'cl-lib)
 
 ;;; vars:
