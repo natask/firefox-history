@@ -6,10 +6,10 @@
 ;; Maintainer: Natnael Kahssay <thisnkk@gmail.com>
 ;; Created: July 05, 2021
 ;; Modified: July 05, 2021
-;; Version: 0.0.1
+;; Version: 0.0.2
 ;; Keywords: browser, matching
 ;; Homepage: https://github.com/savnkk/firefox-history
-;; Package-Requires: ((emacs "26.1"))
+;; Package-Requires: ((emacs "26.1") (lister "0.9"))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
@@ -23,7 +23,7 @@
 (require 'org-protocol)
 (require 'org-roam-url)
 (require 'lister)
-(require 'lister-highlight)
+(require 'lister-mode)
 (require 'cl-lib)
 
 ;;; vars:
@@ -86,12 +86,29 @@
   "Major mode for browsing firefox history."
   ;; Setup lister first since it deletes all local vars:
   (lister-setup	(current-buffer) #'firefox-history-lister-view
-                        nil
-                        (concat "firefox history Version " (firefox-history-version)))
-  ;; --- Now add delve specific stuff:
-  ;; do not mark searches:
-  ;; (setq-local lister-local-marking-predicate #'delve-zettel-p)
-  )
+                        (concat "firefox history Version " (firefox-history-version))))
+
+(defun firefox-history-new-buffer (items &optional heading buffer-name)
+  "List firefox history ITEMS in a new buffer.
+
+HEADING has to be a list item (a list of strings) which will be
+used as a heading for the list. As special case, if HEADING is
+nil, no heading will be displayed, and if HEADING is a string,
+implictly convert it into a valid item.
+
+The new buffer name will be created by using
+`delve-buffer-name-format' with the value of BUFFER-NAME."
+  (let* ((buf (generate-new-buffer (or buffer-name "*FIREFOX-HISTORY*"))))
+    (with-current-buffer buf
+         (firefox-history-mode)
+      (let ((ewoc lister-local-ewoc))
+      (lister-set-list ewoc items)
+                                        ;(setq-local delve-local-initial-list items)
+      (lister-set-header ewoc heading)
+      (lister-goto ewoc :first)))
+    (switch-to-buffer buf)
+    buf))
+
 
 ;;; datatypes:
 
@@ -118,32 +135,31 @@
 See `firefox-history-pp-line' for possible values.")
 
 ;;; lister functions:
+
 (defun firefox-history-reverse-buffer (buf)
   "Refresh all items in BUF."
   (interactive (list (current-buffer)))
-  (lister-reorder-this-level buf (point) 'reverse))
+  (with-current-buffer buf
+    (lister-reorder-sublist-at lister-local-ewoc :point 'reverse)))
 
 ;; Act on the item at point
+(defun firefox-history-item-action (buf pos fn)
+  "Apply FN on item in BUF at point POS."
+  (with-current-buffer buf
+    (let ((data (lister-get-data-at lister-local-ewoc pos)))
+      (pcase data
+        ((pred firefox-history-item-p) (funcall fn data))
+        (_                     (error "Cannot visit this item"))))))
+
 (defun firefox-history-item-chrono (buf pos)
   "Visualize chronology of item in BUF at point POS."
-  (interactive (list (current-buffer) (point)))
-  (unless (lister-item-p buf pos)
-    (user-error "No item to visit"))
-  (let ((data (lister-get-data buf pos)))
-    (pcase data
-      ((pred firefox-history-item-p) (firefox-history-chrono (firefox-history-item-time data)))
-      (_                     (error "Cannot visit this item")))))
-
+  (interactive (list (current-buffer) :point))
+  (firefox-history-item-action buf pos (-compose 'firefox-history-chrono 'firefox-history-item-time)))
 
 (defun firefox-history-item-backtrace (buf pos)
   "Visualize backtrace of item in BUF at point POS."
-  (interactive (list (current-buffer) (point)))
-  (unless (lister-item-p buf pos)
-    (user-error "No item to visit"))
-  (let ((data (lister-get-data buf pos)))
-    (pcase data
-      ((pred firefox-history-item-p) (firefox-history-backtrace-new-buffer (firefox-history-item-time data)))
-      (_                     (error "Cannot visit this item")))))
+  (interactive (list (current-buffer) :point))
+  (firefox-history-item-action buf pos (-compose 'firefox-history-backtrace-new-buffer 'firefox-history-item-time)))
 
 (defun firefox-history-yank-evil (item)
   "Yank ITEM using evil. Message yanked string."
@@ -152,62 +168,36 @@ See `firefox-history-pp-line' for possible values.")
 
 (defun firefox-history-item-yank-time (buf pos)
   "Yank time of item in BUF at point POS."
-  (interactive (list (current-buffer) (point)))
-  (unless (lister-item-p buf pos)
-    (user-error "No item to visit"))
-  (let ((data (lister-get-data buf pos)))
-    (pcase data
-      ((pred firefox-history-item-p) (firefox-history-yank-evil (number-to-string (firefox-history-item-time data))))
-      (_                     (error "Cannot visit this item")))))
+  (interactive (list (current-buffer) :point))
+  (firefox-history-item-action buf pos (lambda (data) (firefox-history-yank-evil (number-to-string (firefox-history-item-time data))))))
 
 (defun firefox-history-item-yank-url (buf pos)
   "Yank url of item in BUF at point POS."
-  (interactive (list (current-buffer) (point)))
-  (unless (lister-item-p buf pos)
-    (user-error "No item to visit"))
-  (let ((data (lister-get-data buf pos)))
-    (pcase data
-      ((pred firefox-history-item-p) (firefox-history-yank-evil (firefox-history-item-url data)))
-      (_                     (error "Cannot visit this item")))))
+  (interactive (list (current-buffer) :point))
+  (firefox-history-item-action buf pos (lambda (data) (firefox-history-yank-evil (firefox-history-item-url data)))))
 
 (defun firefox-history-item-yank-url-org (buf pos)
   "Yank url of item in org format in BUF at point POS."
-  (interactive (list (current-buffer) (point)))
-  (unless (lister-item-p buf pos)
-    (user-error "No item to visit"))
-  (let ((data (lister-get-data buf pos)))
-    (pcase data
-      ((pred firefox-history-item-p) (firefox-history-yank-evil (concat "[[" (firefox-history-item-url data) "][" (firefox-history-item-title data) "]]")))
-      (_                     (error "Cannot visit this item")))))
+  (interactive (list (current-buffer) :point))
+  (firefox-history-item-action buf pos (lambda (data) (firefox-history-yank-evil (concat "[[" (firefox-history-item-url data) "][" (firefox-history-item-title data) "]]")))))
 
 (defun firefox-history-item-yank-url-title (buf pos)
   "Yank url title of item in org format in BUF at point POS."
-  (interactive (list (current-buffer) (point)))
-  (unless (lister-item-p buf pos)
-    (user-error "No item to visit"))
-  (let ((data (lister-get-data buf pos)))
-    (pcase data
-      ((pred firefox-history-item-p) (firefox-history-yank-evil (firefox-history-item-title data)))
-      (_                     (error "Cannot visit this item")))))
+  (interactive (list (current-buffer) :point))
+  (firefox-history-item-action buf pos (lambda (data)  (firefox-history-yank-evil (firefox-history-item-title data)))))
 
 (defun firefox-history-item-visit (buf pos)
   "Visit dates of item in BUF at point POS."
-  (interactive (list (current-buffer) (point)))
-  (unless (lister-item-p buf pos)
-    (user-error "No item to visit"))
-  (let ((data (lister-get-data buf pos)))
-    (pcase data
-      ((pred firefox-history-item-p) (firefox-history-check-if-visited-progressively (firefox-history-item-url data)))
-      (_                     (error "Cannot visit this item")))))
+  (interactive (list (current-buffer) :point))
+  (firefox-history-item-action buf pos (lambda (data) (firefox-history-check-if-visited-progressively (firefox-history-item-url data)))))
 
 (defun firefox-history-expand-toggle-sublist ()
   "Close or open the item's sublist at point."
   (interactive)
-  (let* ((buf (current-buffer))
-         (pos (point)))
-    (if (lister-sublist-below-p buf pos)
-        (lister-remove-sublist-below buf pos)
-      (firefox-history-expand-and-insert buf pos))))
+  (let* ((pos :point))
+    (if (lister-sublist-below-p lister-local-ewoc pos)
+        (lister-delete-sublist-below lister-local-ewoc pos)
+      (firefox-history-expand-and-insert (current-buffer) pos))))
 
 (defun firefox-history-expand-and-insert (buf pos)
   "Determine expansion operators and insert results for item at POS.
@@ -216,17 +206,13 @@ position, collect the results and insert them as sublist.
 
 BUF must be a valid lister buffer populated with delve items. POS
 can be an integer or the symbol `:point'."
-  (interactive (list (current-buffer) (point)))
-  (let* ((position (pcase pos
-                     ((and (pred integerp) pos) pos)
-                     (:point (with-current-buffer buf (point)))
-                     (_ (error "Invalid value for POS: %s" pos))))
-         (item     (lister-get-data buf position))
-         (sublist  (firefox-history-backtrace (firefox-history-item-time item))))
-    (if sublist
-        (with-temp-message "Inserting expansion results..."
-          (lister-insert-sublist-below buf position sublist))
-      (user-error "No expansion found"))))
+  (interactive (list (current-buffer) :point))
+  (with-current-buffer buf
+    (let* ((sublist (firefox-history-item-action buf pos (lambda (item) (firefox-history-backtrace (firefox-history-item-time item))))))
+      (if sublist
+          (with-temp-message "Inserting expansion results..."
+            (lister-insert-sublist-below lister-local-ewoc pos sublist))
+        (user-error "No expansion found")))))
 
 ;;; Code:
 (defun firefox-history (&rest args)
@@ -320,27 +306,6 @@ Parses BACKTR for `lister' consumption."
            collect (let*  ((main-url (list (firefox-history-item (plist-get entry :item) 't)))
                            (backtrace-of-item (mapcar #'firefox-history-item (plist-get entry :backtrace))))
                      (append main-url backtrace-of-item))))
-
-(defun firefox-history-new-buffer (items &optional heading buffer-name)
-  "List firefox history ITEMS in a new buffer.
-
-HEADING has to be a list item (a list of strings) which will be
-used as a heading for the list. As special case, if HEADING is
-nil, no heading will be displayed, and if HEADING is a string,
-implictly convert it into a valid item.
-
-The new buffer name will be created by using
-`delve-buffer-name-format' with the value of BUFFER-NAME."
-  (let* ((buf (generate-new-buffer (or buffer-name "*FIREFOX-HISTORY*"))))
-    (with-current-buffer buf
-      (firefox-history-mode)
-      (lister-set-list buf items)
-                                        ;(setq-local delve-local-initial-list items)
-      (lister-set-header buf heading)
-      (lister-goto buf :first)
-      (lister-highlight-mode))
-    (switch-to-buffer buf)
-    buf))
 
 (defun firefox-history-firefox-unixtime-to-timestamp (time)
   "Convert firefox unixtime TIME in microseconds to timestamp in unix time in seconds."
