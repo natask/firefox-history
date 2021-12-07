@@ -100,12 +100,12 @@ The new buffer name will be created by using
 `delve-buffer-name-format' with the value of BUFFER-NAME."
   (let* ((buf (generate-new-buffer (or buffer-name "*FIREFOX-HISTORY*"))))
     (with-current-buffer buf
-         (firefox-history-mode)
+      (firefox-history-mode)
       (let ((ewoc lister-local-ewoc))
-      (lister-set-list ewoc items)
+        (lister-set-list ewoc items)
                                         ;(setq-local delve-local-initial-list items)
-      (lister-set-header ewoc heading)
-      (lister-goto ewoc :first)))
+        (lister-set-header ewoc heading)
+        (lister-goto ewoc :first)))
     (switch-to-buffer buf)
     buf))
 
@@ -295,9 +295,9 @@ HEAD signifies the search target."
 Parses CHRONO for `lister' consumption."
   (cl-loop for entry in chrono
            collect (let*  ((main-url (list (firefox-history-item (plist-get entry :item) 't)))
-                     (left (mapcar #'firefox-history-item (plist-get entry :left)))
-                     (right (mapcar #'firefox-history-item (plist-get entry :right))))
-               (append left main-url right))))
+                           (left (mapcar #'firefox-history-item (plist-get entry :left)))
+                           (right (mapcar #'firefox-history-item (plist-get entry :right))))
+                     (append left main-url right))))
 
 (defun  firefox-history-parse-backtrace (backtr)
   "Receives a nested property list BACKTR of with `time' literal, under it `item' and `backtrace'.

@@ -57,11 +57,22 @@
 (defvar firefox-history-current-search-results 'nil)
 ;;; Code:
 
-(declare-function firefox-history-search--query-string-to-sexp "ext:firefox-history-search" (query) t)
-(declare-function firefox-history-search--transform-query "ext:firefox-history-search" (query) t)
-(fset 'firefox-history-search--query-string-to-sexp (sexp-string--define-query-string-to-sexp-fn "firefox-history-search"))
-(fset 'firefox-history-search--transform-query (sexp-string--define-transform-query-fn "firefox-history-search" :transform))
+(defun firefox-history-search--query-string-to-sexp (input &optional boolean)
+  "Parse string INPUT where BOOLEAN is default boolean.
+Look at `sexp-string--query-string-to-sexp' for more information."
+  (sexp-string--query-string-to-sexp :input input
+                                     :predicates firefox-history-search-predicates
+                                     :default-boolean boolean firefox-history-search-default-predicate-boolean
+                                     :default-predicate firefox-history-search-default-predicate
+                                     :pex-function nil))
 
+(defun firef-history-search--transform-query (query)
+  "Return transformed form of QUERY against `:transform'.
+Look at `sexp-string--transform-query' for more information."
+  (sexp-string--transform-query :query query
+                                :type :tranform
+                                :predicates firefox-history-search-predicates
+                                :ignore 't))
 ;;;; embark::
 (add-to-list 'embark-exporters-alist '(firefox-history . embark-export-firefox-history))
 (add-to-list 'embark-keymap-alist '(firefox-history . embark-firefox-history-map))
