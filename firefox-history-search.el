@@ -62,15 +62,15 @@
 Look at `sexp-string--query-string-to-sexp' for more information."
   (sexp-string--query-string-to-sexp :input input
                                      :predicates firefox-history-search-predicates
-                                     :default-boolean boolean firefox-history-search-default-predicate-boolean
+                                     :default-boolean (or boolean firefox-history-search-default-predicate-boolean)
                                      :default-predicate firefox-history-search-default-predicate
                                      :pex-function nil))
 
-(defun firef-history-search--transform-query (query)
+(defun firefox-history-search--transform-query (query)
   "Return transformed form of QUERY against `:transform'.
 Look at `sexp-string--transform-query' for more information."
   (sexp-string--transform-query :query query
-                                :type :tranform
+                                :type :transform
                                 :predicates firefox-history-search-predicates
                                 :ignore 't))
 ;;;; embark::
@@ -78,9 +78,9 @@ Look at `sexp-string--transform-query' for more information."
 (add-to-list 'embark-keymap-alist '(firefox-history . embark-firefox-history-map))
 
 (embark-define-keymap embark-firefox-history-map
-    "Keymap for Embark firefox history actions."
-    ("RET" firefox-history-search-after-cand)
-    ("E" embark-export-firefox-history))
+  "Keymap for Embark firefox history actions."
+  ("RET" firefox-history-search-after-cand)
+  ("E" embark-export-firefox-history))
 
 (defun embark-export-firefox-history (_)
   (if firefox-history-current-search-results
@@ -99,15 +99,15 @@ Expect STR to be clause that fits between `where' and `order' SQL constructs."
   "Create where... type query for firefox history from STR.
 Expect STR to be clause that fits between `where' and `order' SQL constructs."
   (print cand))
-  ;; (if-let ((cand-visit-date (--> (assoc cand firefox-history-current-search-results)
-  ;;                             (cdr it)
-  ;;                             (firefox-history-item-time it)
-  ;;                             (prin1 it))))
-  ;; (print (concat "where "
-  ;;         "test"
-  ;;         " and visit_date <= "
-  ;;         cand-visit-date
-  ;;         " order by visit_date desc limit 20"))))
+;; (if-let ((cand-visit-date (--> (assoc cand firefox-history-current-search-results)
+;;                             (cdr it)
+;;                             (firefox-history-item-time it)
+;;                             (prin1 it))))
+;; (print (concat "where "
+;;         "test"
+;;         " and visit_date <= "
+;;         cand-visit-date
+;;         " order by visit_date desc limit 20"))))
 
 (defun firefox-history-search-interactive-query (query)
   "Convert QUERY to firefox-history compatable query.
@@ -132,16 +132,16 @@ look at `firefox-history-search--query-string-to-sexp' and `firefox-history-sear
        (setq firefox-history-current-search-results it)
        (mapcar (lambda (x) (cons (firefox-history-lister-view x) x)) it)
        (consult--read it
-       :lookup #'consult--lookup-cdr
-       ;; :add-history
-       ;; (when-let (thing (thing-at-point 'symbol))
-       ;; (consult--async-split-initial thing))
-       :require-match t
-       :category 'firefox-history
-       ;; :category 'consult-grep
-       ;; :group #'consult--grep-group
-       ;; :history '(:input consult--grep-history)
-       :sort nil)
+                      :lookup #'consult--lookup-cdr
+                      ;; :add-history
+                      ;; (when-let (thing (thing-at-point 'symbol))
+                      ;; (consult--async-split-initial thing))
+                      :require-match t
+                      :category 'firefox-history
+                      ;; :category 'consult-grep
+                      ;; :group #'consult--grep-group
+                      ;; :history '(:input consult--grep-history)
+                      :sort nil)
        (firefox-history-new-buffer (list it) "Search results")))
 
 (defun firefox-history-search-consult--command-args (cmd)
