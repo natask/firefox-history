@@ -69,10 +69,12 @@ Look at `sexp-string--query-string-to-sexp' for more information."
 (defun firefox-history-search--transform-query (query)
   "Return transformed form of QUERY against `:transform'.
 Look at `sexp-string--transform-query' for more information."
-  (sexp-string--transform-query :query query
-                                :type :transform
-                                :predicates firefox-history-search-predicates
-                                :ignore 't))
+  (sexp-string-collapse-list (sexp-string--transform-query
+                              :query query
+                              :type :transform
+                              :predicates firefox-history-search-predicates
+                              :ignore 't)))
+
 ;;;; embark::
 (add-to-list 'embark-exporters-alist '(firefox-history . embark-export-firefox-history))
 (add-to-list 'embark-keymap-alist '(firefox-history . embark-firefox-history-map))
