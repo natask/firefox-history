@@ -20,7 +20,6 @@
 
 (require 'consult)
 (require 'embark)
-(require 'firefox-history)
 (require 'sexp-string)
 
 ;;; vars:
@@ -76,17 +75,17 @@ Look at `sexp-string--transform-query' for more information."
    :ignore 't))
 
 ;;;; embark::
-(add-to-list 'embark-exporters-alist '(firefox-history . embark-export-firefox-history))
-(add-to-list 'embark-keymap-alist '(firefox-history . embark-firefox-history-map))
-
-(embark-define-keymap embark-firefox-history-map
-  "Keymap for Embark firefox history actions."
-  ("RET" firefox-history-search-after-cand)
-  ("E" embark-export-firefox-history))
-
 (defun embark-export-firefox-history (_)
   (if firefox-history-current-search-results
       (firefox-history-new-buffer firefox-history-current-search-results "Search results")))
+
+(defvar-keymap embark-firefox-history-map
+ :doc "Keymap for Embark firefox history actions."
+ :parent embark-general-map
+ "E" 'embark-export-firefox-history)
+
+(add-to-list 'embark-exporters-alist '(firefox-history . embark-export-firefox-history))
+(add-to-list 'embark-keymap-alist '(firefox-history . embark-firefox-history-map))
 
 ;;;; search::
 (defun firefox-history-search-match (str)
@@ -96,20 +95,6 @@ Expect STR to be clause that fits between `where' and `order' SQL constructs."
           str
           " order by visit_date desc limit "
           (number-to-string firefox-history-depth)))
-
-(defun firefox-history-search-after-cand (cand)
-  "Create where... type query for firefox history from STR.
-Expect STR to be clause that fits between `where' and `order' SQL constructs."
-  (print cand))
-;; (if-let ((cand-visit-date (--> (assoc cand firefox-history-current-search-results)
-;;                             (cdr it)
-;;                             (firefox-history-item-time it)
-;;                             (prin1 it))))
-;; (print (concat "where "
-;;         "test"
-;;         " and visit_date <= "
-;;         cand-visit-date
-;;         " order by visit_date desc limit 20"))))
 
 (defun firefox-history-search-interactive-query (query)
   "Convert QUERY to firefox-history compatable query.
